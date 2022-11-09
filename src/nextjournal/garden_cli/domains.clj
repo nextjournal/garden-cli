@@ -10,7 +10,7 @@
       :out
       str/trim))
 
-(defn- check-domain-dns [{:as opts :keys [domain env]}]
+(defn check-domain-dns [{:as opts :keys [domain env]}]
   (let [server-domain (case env
                         :production "github.clerk.garden"
                         :staging "github.staging.clerk.garden")
@@ -20,7 +20,7 @@
       opts
       {:error (format "domain %s should point to %s but points to %s" domain domain-ip server-ip)})))
 
-(defn- routes-endpoint [{:keys [domain env]}]
+(defn routes-endpoint [{:keys [domain env]}]
   (let [generic-routes-endpoint "/config/apps/http/servers/greenhouse/routes"
         greenhouse-routes-endpoint "/id/greenhouse-routes/routes"]
     (if (str/ends-with? domain (case env
