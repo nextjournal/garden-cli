@@ -18,6 +18,9 @@
 
 (def ssh-opts ["-N" "-S" "none" "-o" "StrictHostKeyChecking=no" "-o" "UserKnownHostsFile=/dev/null"])
 
+(defn tunnel-up? [port]
+  (some? (:status (curl/get (format "http://localhost:%s" port) {:throw false}))))
+
 (defn tunnel [{:keys [port env]}]
   (when-not (get-in @tunnels [env port])
     (swap! tunnels assoc-in [env port] (p/process (concat ["ssh"]
@@ -26,15 +29,14 @@
                                                   {:inherit true
                                                    :shutdown p/destroy-tree}))
     ;; wait for tunnel
-    (loop [retries 20]
-      (when (and (> retries 0)
-                 (try
-                   (curl/get (format "http://localhost:%s" port))
-                   false
-                   (catch clojure.lang.ExceptionInfo _
-                     true)))
-        (Thread/sleep 50)
-        (recur (dec retries))))))
+    (loop [retries 0]
+      (if (< retries 100)
+        (when-not (tunnel-up? port)
+          (Thread/sleep 50)
+          (recur (inc retries)))
+        (throw (ex-info (format "could not open tunnel within %s retries" retries) {}))))))
+
+
 
 (defn cleanup-tunnels []
   (doseq [port-map (vals @tunnels)]
