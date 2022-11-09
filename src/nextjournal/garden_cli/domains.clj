@@ -29,31 +29,6 @@
       greenhouse-routes-endpoint
       generic-routes-endpoint)))
 
-(defn list-backends [opts]
-  (caddy/get! opts "/id/greenhouse-routes/routes/"))
-
-(defn clear-backends! [opts]
-  (caddy/patch! opts "/id/greenhouse-routes/routes/" {:body []}))
-
-(defn add-backend! [{:as opts :keys [domain upstream]}]
-  (util/ok-> opts
-             (check-domain-dns)
-             (caddy/post! (routes-endpoint opts)
-                          {:body {"@id" domain
-                                  :match [{:host [domain]}]
-                                  :handle [{:handler "reverse_proxy"
-                                            :upstreams [{:dial upstream}]}]}})))
-
-(defn update-backend! [{:as opts :keys [domain upstream]}]
-  (util/ok-> opts
-             (check-domain-dns)
-             (caddy/post! (format "/id/%s/handle/0/upstreams/0/dial" domain) {:body {:upstream upstream}})))
-
-(defn delete-backend! [{:as opts :keys [domain]}]
-  (util/ok-> opts
-             (check-domain-dns)
-             (caddy/delete! (format "/id/%s" domain))))
-
 (defn- strip-prefix [prefix s]
   (if (str/starts-with? s prefix)
     (str/replace-first s prefix "")
