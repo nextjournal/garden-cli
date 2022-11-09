@@ -1,14 +1,7 @@
 (ns nextjournal.garden-cli.garden
-  (:require [babashka.process :as p]))
+  (:require [babashka.process :as p]
+            [clojure.java.browse :as browse]))
 
-(defn- open [url]
-  (try
-    (p/sh ["open" url])
-    (catch Exception _
-      (try
-        (p/sh ["xdg-open" url])
-        (catch Exception _
-          (println "open" url))))))
 
 (defn build [{:keys [env repo branch update]
               :or {update true}}]
@@ -21,4 +14,4 @@
         url (if update
               (str url "?update=1")
               url)]
-    (open url)))
+    (browse/browse-url url)))
