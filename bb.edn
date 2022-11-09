@@ -1,3 +1,4 @@
 {:paths ["src"]
  :bbin/bin {garden {:main-opts ["-m" "nextjournal.garden-cli"]
-                    :tool true}}}
+                    :tool true}}
+ :deps {local/deps {:local/root "."}}}
