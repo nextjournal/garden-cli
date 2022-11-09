@@ -36,8 +36,6 @@
           (recur (inc retries)))
         (throw (ex-info (format "could not open tunnel within %s retries" retries) {}))))))
 
-
-
 (defn cleanup-tunnels []
   (doseq [port-map (vals @tunnels)]
     (doseq [process (vals port-map)]
@@ -47,6 +45,7 @@
 (comment
   (cleanup-tunnels))
 
-(.addShutdownHook
- (Runtime/getRuntime)
- (Thread. cleanup-tunnels))
+(defonce _cleanup-hook
+  (.addShutdownHook
+   (Runtime/getRuntime)
+   (Thread. cleanup-tunnels)))
