@@ -73,15 +73,21 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn- retry [f]
-  (let [max-retries 1000
-        timeout 2000]
-    (loop [n 1 {:keys [status] :as result} (try (f) (catch Exception e {:error (str e)}))]
-      (log/debugf "attempt %s - %s" n result)
-      (if (or (>= n max-retries) (= 200 status))
-        result
-        (do (Thread/sleep timeout)
-            (recur (inc n) (f)))))))
+(defn retry
+  ([f]
+   (retry f nil))
+  ([f {:keys [max-retries timeout]
+       :or {max-retries 20
+            timeout 50}}]
+   (loop [retries 0]
+     (if (< retries max-retries)
+       (when-not (:success (try (f) (catch Exception e {:error e})))
+         (Thread/sleep timeout)
+         (recur (inc retries)))
+       (throw (ex-info "retry failed" {}))))))
 
 (defn wait-for-server [url]
-  (retry #(deref (client/get url))))
+  (retry
+   (fn [] {:success (= 200 (:status @(client/get url)))})
+   {:max-retries 1000
+    :timeout 2000}))

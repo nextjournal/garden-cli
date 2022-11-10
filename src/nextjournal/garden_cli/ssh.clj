@@ -1,6 +1,7 @@
 (ns nextjournal.garden-cli.ssh
   (:require [babashka.curl :as curl]
-            [babashka.process :as p]))
+            [babashka.process :as p]
+            [nextjournal.garden-cli.util :as util]))
 
 (def jumphost "deploy@jump.sauspiel.de")
 (def hosts {:production "deploy@172.16.227.137"
@@ -29,12 +30,10 @@
                                                   {:inherit true
                                                    :shutdown p/destroy-tree}))
     ;; wait for tunnel
-    (loop [retries 0]
-      (if (< retries 100)
-        (when-not (tunnel-up? port)
-          (Thread/sleep 50)
-          (recur (inc retries)))
-        (throw (ex-info (format "could not open tunnel within %s retries" retries) {}))))))
+    (util/retry
+     (fn [] {:success (tunnel-up? port)})
+     {:max-retries 100
+      :timeout 50})))
 
 (defn cleanup-tunnels []
   (doseq [port-map (vals @tunnels)]
