@@ -2,4 +2,5 @@
  :deps {babashka/process {:mvn/version "0.3.11"}
         cheshire/cheshire {:mvn/version "5.11.0"}
         org.babashka/cli {:mvn/version "0.5.40"}
-        babashka/babashka.curl {:mvn/version "0.1.2"}}}
+        babashka/babashka.curl {:mvn/version "0.1.2"}
+        java-http-clj/java-http-clj {:mvn/version "0.4.3"}}}
