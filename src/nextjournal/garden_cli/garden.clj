@@ -20,7 +20,9 @@
                                                  (deliver p nil))
                                      :on-text (fn [ws text last?]
                                                 (print text)
-                                                (flush))})
+                                                (flush)
+                                                (when (= "✅ Build finished" (str/trim text))
+                                                  (System/exit 0)))})
                                    {:success true}))
                      p))]
     (reduce (fn [a v] @v) nil promises)))
