@@ -11,7 +11,19 @@
    :garden-url {:desc "An url pointing to a repo on clerk.garden"}
    :env {:desc "environment (production or staging)"
          :coerce :keyword
-         :default :staging}})
+         :default :staging}
+   :browse {:desc "open in webbroswer"
+            :coerce :boolean
+            :default false}
+   :update {:desc "update to newest commit"
+            :coerce :boolean
+            :default false}
+   :show-progress {:desc "show build progress on command line"
+                   :coerce :boolean
+                   :default true}
+   :rebuild {:desc "whether to force a rebuild"
+             :coerce :boolean
+             :default false}})
 
 (defn wrap-with-error-reporting [f]
   (fn [x] (when-let [error (:error (f (:opts x)))]

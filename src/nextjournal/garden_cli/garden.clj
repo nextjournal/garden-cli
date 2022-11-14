@@ -2,7 +2,8 @@
   (:require [nextjournal.garden-cli.util :as util]
             [clojure.java.browse :as browse]
             [java-http-clj.websocket :as ws]
-            [babashka.curl :as http]))
+            [babashka.curl :as http]
+            [clojure.string :as str]))
 
 (defn- parse-ws-urls [html]
   (into #{} (re-seq #"wss?://[^\"]+" html)))
@@ -29,21 +30,33 @@
     (when (= 200 status)
       (stream-progress (parse-ws-urls body)))))
 
-(defn build [{:keys [env repo branch update browse show-progress]
-              :or {update true
-                   browse true
-                   show-progress true}}]
+(defn format-query-params [params]
+  (some->> params
+           (map (fn [[k v]] (format "%s=%s" k v)))
+           (str/join "&")
+           (format "?%s")))
+
+(defn- format-url [{:as opts :keys [env repo branch]}]
   (let [host (case env
                :production "https://github.clerk.garden"
                :staging "https://github.staging.clerk.garden"
                :dev "http://localhost:8001")
-        url (if branch
-              (format "%s/%s/tree/%s" host repo branch)
-              (format "%s/%s" host repo))
-        url (if update
-              (str url "?update=1")
-              url)]
+        query-params (format-query-params (select-keys opts [:update :rebuild]))]
+    (if branch
+      (format "%s/%s/tree/%s%s" host repo branch query-params)
+      (format "%s/%s%s" host repo query-params))))
+
+(defn build [{:as opts :keys [browse show-progress]}]
+  (let [url (format-url opts)]
     (when browse
       (browse/browse-url url))
     (when show-progress
       (show-build-progress url))))
+
+(comment
+  (build {:env :dev
+          :repo "sohalt/clerk-minimal"
+          :browse false
+          :update false
+          :rebuild false
+          :show-progress true}))
