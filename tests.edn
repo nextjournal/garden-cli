@@ -1,0 +1,5 @@
+#kaocha/v1
+ {:plugins [:notifier :print-invocations :profiling :preloads :hooks]
+  :kaocha/bindings {kaocha.stacktrace/*stacktrace-filters* []}
+  :tests [{:id :unit
+           :test-paths ["test"]}]}

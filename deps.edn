@@ -2,4 +2,13 @@
  :deps {babashka/process {:mvn/version "0.3.11"}
         cheshire/cheshire {:mvn/version "5.11.0"}
         org.babashka/cli {:mvn/version "0.5.40"}
-        babashka/babashka.curl {:mvn/version "0.1.2"}}}
+        http-kit/http-kit {:mvn/version "2.6.0"}
+        com.taoensso/timbre {:mvn/version "5.2.1"}
+        babashka/babashka.curl {:mvn/version "0.1.2"}}
+ :aliases
+ {:test
+  {:extra-paths ["test"]
+   :extra-deps {lambdaisland/kaocha {:mvn/version "RELEASE"}
+                com.lambdaisland/kaocha-cljs {:mvn/version "RELEASE"}}
+   :exec-fn kaocha.runner/exec-fn
+   :exec-args {}}}}
