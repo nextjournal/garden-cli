@@ -16,6 +16,7 @@
                         :staging "github.staging.clerk.garden")
         server-ip (resolve server-domain)
         domain-ip (resolve domain)]
+    (assert (some? server-ip) "Failed to resolve server ip")
     (if (= server-ip domain-ip)
       opts
       {:error (format "domain %s should point to %s but points to %s" domain domain-ip server-ip)})))
