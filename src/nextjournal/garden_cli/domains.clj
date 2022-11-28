@@ -5,7 +5,7 @@
             [nextjournal.garden-cli.caddy :as caddy]
             [nextjournal.garden-cli.util :as util]))
 
-(defn- resolve [domain]
+(defn- resolve-domain [domain]
   (-> (p/sh ["dig" "+short" domain])
       :out
       str/trim))
@@ -14,8 +14,8 @@
   (let [server-domain (case env
                         :production "github.clerk.garden"
                         :staging "github.staging.clerk.garden")
-        server-ip (resolve server-domain)
-        domain-ip (resolve domain)]
+        server-ip (resolve-domain server-domain)
+        domain-ip (resolve-domain domain)]
     (assert (some? server-ip) "Failed to resolve server ip")
     (if (= server-ip domain-ip)
       opts
