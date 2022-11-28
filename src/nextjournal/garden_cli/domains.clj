@@ -19,7 +19,7 @@
     (assert (some? server-ip) "Failed to resolve server ip")
     (if (= server-ip domain-ip)
       opts
-      {:error (format "domain %s should point to %s but points to %s" domain domain-ip server-ip)})))
+      {:error (format "domain %s should point to %s but points to %s" domain server-ip domain-ip)})))
 
 (defn routes-endpoint [{:keys [domain env]}]
   (let [generic-routes-endpoint "/config/apps/http/servers/greenhouse/routes"
