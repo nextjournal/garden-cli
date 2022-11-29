@@ -21,11 +21,13 @@
 (defn tunnel-up? [port]
   (some? (:status (curl/get (format "http://localhost:%s" port) {:throw false}))))
 
-(defn tunnel [{:keys [port env]}]
+(defn tunnel [{:keys [port remote-host remote-port env]
+               :or {remote-host "localhost"
+                    remote-port port}}]
   (when-not (get-in @tunnels [env port])
     (swap! tunnels assoc-in [env port] (p/process (concat ["ssh"]
                                                           ssh-opts
-                                                          [(format "-L:%s:localhost:%s" port port) "-J" jumphost (hosts env)])
+                                                          [(format "-L:%s:%s:%s" port remote-host remote-port) "-J" jumphost (hosts env)])
                                                   {:inherit true
                                                    :shutdown p/destroy-tree}))
     ;; wait for tunnel
@@ -40,9 +42,11 @@
   (doseq [port-map (vals @tunnels)]
     (doseq [process (vals port-map)]
       (p/destroy-tree process)
-      @process)))
+      @process))
+  (reset! tunnels {}))
 
 (comment
+  (tunnel {:port 8000 :env :staging})
   (cleanup-tunnels))
 
 (defonce _cleanup-hook
