@@ -8,7 +8,9 @@
 (defn- resolve-domain [domain]
   (-> (p/sh ["dig" "+short" domain])
       :out
-      str/trim))
+      str/trim
+      str/split-lines
+      last))
 
 (defn check-domain-dns [{:as opts :keys [domain env]}]
   (let [server-domain (case env
