@@ -1,6 +1,6 @@
 (ns nextjournal.garden-cli.ssh
-  (:require [babashka.curl :as curl]
-            [babashka.process :as p]))
+  (:require [babashka.process :as p])
+  (:import [java.net Socket ConnectException]))
 
 (def jumphost "deploy@jump.sauspiel.de")
 (def hosts {:production "deploy@172.16.227.137"
@@ -19,7 +19,9 @@
 (def ssh-opts ["-N" "-S" "none" "-o" "StrictHostKeyChecking=no" "-o" "UserKnownHostsFile=/dev/null"])
 
 (defn tunnel-up? [port]
-  (some? (:status (curl/get (format "http://localhost:%s" port) {:throw false}))))
+  (try (Socket. "localhost" port)
+       true
+       (catch ConnectException e false)))
 
 (defn tunnel [{:keys [port remote-host remote-port env]
                :or {remote-host "localhost"
