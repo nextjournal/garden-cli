@@ -92,9 +92,8 @@
                          opts (if (some? repo)
                                 (if-let [url (some->> @(http/get url {:follow-redirects false})
                                                       :headers
-                                                      :location
-                                                      (str "https://github.clerk.garden"))]
-                                  (assoc opts :garden-url url)
+                                                      :location)]
+                                  (assoc opts :garden-url (str/replace url #"https://build." "https://"))
                                   {:error "Failed to get newest revision for branch"})
                                 {:error "Domain does not point to a garden repo"})]
                      (util/ok-> opts
