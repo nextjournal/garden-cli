@@ -6,7 +6,7 @@ A command line utility for use with [Clerk Garden](https://github.clerk.garden).
 
 Install using [bbin](https://github.com/babashka/bbin):
 
-`bbin install io.github.nextjournal/garden-cli`
+`bbin install io.github.nextjournal/garden-cli --latest-sha`
 
 ## Usage
 
