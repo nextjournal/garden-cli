@@ -23,7 +23,7 @@
 garden build <repo>
 
 garden domains list
-garden domains add <domain> --garden-url <url>
+garden domains add <domain> <garden-url>
 garden domains remove <domain>
 garden domains update <domain> [--branch <branch>]
 "))
