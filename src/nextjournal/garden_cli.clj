@@ -11,7 +11,7 @@
    :garden-url {:desc "An url pointing to a repo on clerk.garden"}
    :env {:desc "environment (production or staging)"
          :coerce :keyword
-         :default :staging}})
+         :default :production}})
 
 (defn wrap-with-error-reporting [f]
   (fn [x] (when-let [error (:error (f (:opts x)))]
