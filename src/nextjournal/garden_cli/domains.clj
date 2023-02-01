@@ -38,9 +38,9 @@
     s))
 
 (defn add [{:as opts :keys [domain garden-url]}]
-  (let [garden-url (->> garden-url
-                        (strip-prefix "https://github.clerk.garden/")
-                        (strip-prefix "/"))]
+  (let [repo (->> garden-url
+                  (strip-prefix "https://github.clerk.garden/")
+                  (strip-prefix "/"))]
     (util/if-ok-let [r (check-domain-dns opts)]
                     (if (= 404 (:status (caddy/get opts (format "/id/%s" domain))))
                       (util/if-ok-let [r (caddy/post! opts
@@ -48,7 +48,7 @@
                                                       {:body {"@id" domain
                                                               :match [{:host [domain]}]
                                                               :handle [{:handler "file_server"
-                                                                        :root (format "/var/lib/garden/notebooks/%s" garden-url)}]}})]
+                                                                        :root (format "/var/lib/garden/notebooks/%s" repo)}]}})]
                                       opts
                                       r)
                       {:error "Attempt to add a domain for which there already is a mapping"})
