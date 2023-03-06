@@ -12,14 +12,14 @@
       str/split-lines
       last))
 
-(defn check-domain-dns [{:as opts :keys [domain env]}]
+(defn check-domain-dns [{:as opts :keys [domain env force]}]
   (let [server-domain (case env
                         :production "github.clerk.garden"
                         :staging "github.staging.clerk.garden")
         server-ip (resolve-domain server-domain)
         domain-ip (resolve-domain domain)]
     (assert (some? server-ip) "Failed to resolve server ip")
-    (if (= server-ip domain-ip)
+    (if (or force (= server-ip domain-ip))
       opts
       {:error (format "domain %s should point to %s but points to %s" domain server-ip domain-ip)})))
 
