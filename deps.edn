@@ -1,0 +1,4 @@
+{:paths ["src" "resources"]
+ :deps {io.github.seancorfield/deps-new {:git/tag "v0.5.2"
+                                         :git/sha "253f32af67a87bc4f6d7f60e2a7353ca220a9d81"}
+        io.github.nextjournal/garden-template {:git/sha "dfdc1a92937829da0c8b6e6e8cd3b7789017ed0b"}}}

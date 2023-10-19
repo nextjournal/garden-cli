@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  build-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install babashka
+        run: |
+          bash < <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/install)
+
+      - name: Build standalone cli
+        run: |
+          ./static-cli.sh target
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: target/garden
