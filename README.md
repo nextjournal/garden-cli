@@ -9,7 +9,7 @@ You can download a self-contained executable under [releases](https://github.com
 Alternatively, if you already have [babashka](https://babashka.org) installed and want to use that:
 
 1. Install [bbin](https://github.com/babashka/bbin)
-2. Run `bbin install io.github.nextjournal/garden-cli --latest-sha
+2. Run `bbin install io.github.nextjournal/garden-cli --latest-sha`
 
 ## Usage
 
