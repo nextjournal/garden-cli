@@ -21,7 +21,14 @@ jobs:
         run: |
           ./static-cli.sh target
 
-      - name: Release
+      - name: Upload build
+        uses: actions/upload-artifact@v3
+        with:
+          name: garden-x86_64-linux-static
+          path: target/garden
+
+      - name: Create release
+        if: startsWith(github.ref,'refs/tags/v')
         uses: softprops/action-gh-release@v1
         with:
           files: target/garden
