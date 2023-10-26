@@ -16,7 +16,7 @@
 
 (def version (or (try (slurp (io/resource "VERSION"))
                       (catch Exception e nil))
-                 (try (let [{:keys [exit out]} (sh ["git" "describe"] {:dir (str (fs/parent *file*))
+                 (try (let [{:keys [exit out]} (sh ["git" "describe" "--tags"] {:dir (str (fs/parent *file*))
                                                                        :out :string})]
                         (when (zero? exit)
                           out))
