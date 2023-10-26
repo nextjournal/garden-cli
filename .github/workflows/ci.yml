@@ -12,6 +12,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+        with:
+          # fetch all history to get the commits required for extracting the subtree
+          fetch-depth: 0
 
       - name: Install babashka
         run: |
