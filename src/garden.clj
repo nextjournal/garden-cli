@@ -34,6 +34,11 @@
   (binding [*print-namespace-maps* false]
     (apply core/pr-str xs)))
 
+(defn print-error [s]
+  (binding [*out* *err*]
+    (println s))
+  {:exit-code 1})
+
 (def arboretum-ssh-host
   (or (System/getenv "ARBORETUM_SSH_DEST")
       "arboretum@ssh.application.garden"))
@@ -129,15 +134,15 @@
               (setup-git-remote! (git-remote-url id))
               (update-config! assoc :project project))
 
-            (println (str "error: " message))))))))
+            (print-error message)))))))
 
 (defn deploy [{:keys [opts]}]
   (let [{:keys [git-ref force]} opts
         {:keys [out exit]} (sh "git rev-parse" git-ref)]
     (if (pos? exit)
-      (println (if (= git-ref "HEAD")
-                 "error: you need commit before you can deploy."
-                 (format "error: `%s` is not a valid git ref." git-ref)))
+      (print-error (if (= git-ref "HEAD")
+                 "You need commit before you can deploy."
+                 (format "`%s` is not a valid git ref." git-ref)))
       (let [sha (str/trim out)
             branch (-> (sh "git symbolic-ref --short HEAD") :out str/trim)
             remote (-> (sh "git" "config" (str "branch." branch ".remote")) :out str/trim)
@@ -163,7 +168,7 @@
 
                                   (seq remote-url)
                                   (assoc :remote-url remote-url))))))))
-          (println (str "error: " message)))))))
+          (print-error message))))))
 
 (defn rename [{:keys [opts]}]
   (if-not (garden-project?)
@@ -174,8 +179,8 @@
           (do (update-config! assoc :project project)
               (println "Project renamed successfully.")
               (println (str "Once deployed, your application will be available at: 'https://" new-project-name "." "live.clerk.garden'.")))
-          (println (str "error: " message))))
-      (println "You need to pass a `new-project-name` argument."))))
+          (print-error message)))
+      (print-error "You need to pass a `new-project-name` argument."))))
 
 (def cols '[name status git-rev domains deployed-at deployed-by owner groups])
 (def col-sep 2)
@@ -542,6 +547,14 @@
                                 :json (println (json/encode result))))
                             (f m))))))
 
+(defn wrap-with-exit-code [command]
+  (update command :fn (fn [f]
+                        (fn [m]
+                          (let [{:as result :keys [exit-code]} (f m)]
+                            (if exit-code
+                              (System/exit exit-code)
+                              result))))))
+
 ;; copied from private bb cli fn
 (defn split [a b]
   (let [[prefix suffix] (split-at (count a) b)]
@@ -630,10 +643,11 @@
     (migrate-config-file!)
     (let [{:keys [args error]} (conform-arguments table *command-line-args*)]
       (if args
-        (cli/dispatch (map (comp wrap-with-output-format
+        (cli/dispatch (map (comp wrap-with-exit-code
+                                 wrap-with-output-format
                                  wrap-with-quiet
                                  wrap-with-help) table) args)
-        (println error)))))
+        (print-error error)))))
 
 (when (= *file* (System/getProperty "babashka.file"))
   (-main))
