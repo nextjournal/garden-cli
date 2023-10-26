@@ -8,7 +8,7 @@ out="$(readlink -f "$1")"
 workdir="$(pwd)"
 clidir="$(dirname $0)"
 cd "$clidir"
-version="$(git describe --tags --match "v*")"
+version="$(git describe --tags --match "v*" || echo "unknown")"
 echo -n $version > resources/VERSION
 bb uberjar cli.jar -m garden
 tmpdir="$(mktemp -d)"
@@ -20,4 +20,4 @@ cat ./bb cli.jar > garden
 chmod +x garden
 mkdir -p $out
 mv garden $out
-
+cd $workdir
