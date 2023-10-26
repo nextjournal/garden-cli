@@ -8,7 +8,7 @@ out="$(readlink -f "$1")"
 workdir="$(pwd)"
 clidir="$(dirname $0)"
 cd "$clidir"
-version="$(git describe --tags)"
+version="$(git describe --tags --match "v*")"
 echo -n $version > resources/VERSION
 bb uberjar cli.jar -m garden
 tmpdir="$(mktemp -d)"
