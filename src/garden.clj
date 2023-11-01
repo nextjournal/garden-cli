@@ -170,6 +170,13 @@
                                   (assoc :remote-url remote-url))))))))
           (print-error message))))))
 
+(defn sftp [_ctx]
+  (let [{:keys [id]} (call-api {:command "info" :project (project-name)})
+        [host port] (clojure.string/split arboretum-ssh-host #":")]
+    (shell (concat ["sftp" (str "-o SetEnv SFTP_PROJECT=" id)]
+                   (when port ["-P" port])
+                   [host]))))
+
 (defn rename [{:keys [opts]}]
   (if-not (garden-project?)
     (println "`rename` might only be called from inside a garden project. Run `garden init` to get started.")
@@ -451,6 +458,8 @@
     :spec (assoc default-spec
                  :port {:ref "<port>" :required? false
                         :desc "The local TCP port to be forwarded"})}
+   {:cmds ["sftp"] :fn sftp
+    :help "Spawn a SFTP session to your project storage"}
    {:cmds ["publish"] :args->opts [:domain] :fn publish
     :spec (assoc default-spec
                  :domain {:ref "<domain>"
