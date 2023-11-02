@@ -1,1 +1,2 @@
-src/garden.clj
+#! /bin/sh
+exec bb -Sdeps '{:deps {io.github.nextjournal/garden-cli {:git/sha "c43bc82c4a4fa74ef22d8b4b7fa212e3bbcd279e"}}}' -m garden $@
