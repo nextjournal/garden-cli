@@ -14,7 +14,7 @@ mkdir -p "$target_dir"
 tmpdir="$(mktemp -d)"
 cd "$tmpdir"
 echo "#!/bin/sh
-exec bb -Sdeps '{:deps {io.github.nextjournal/garden-cli {:git/sha \"${rev}\"}}}' -Dnextjournal.garden.rev=${shortRev} -m garden \$@" > garden
+exec bb -Sdeps '{:deps {io.github.nextjournal/garden-cli {:git/sha \"${rev}\"}}}' -Dnextjournal.garden.rev=${shortRev} -m nextjournal.garden-cli \$@" > garden
 chmod +x garden
 tar caf "$target_dir/garden.tar.gz" garden
 sha256sum "$target_dir/garden.tar.gz" | cut -d " " -f 1 > "$target_dir/garden.tar.gz.sha256"

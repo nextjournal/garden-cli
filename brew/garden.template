@@ -7,7 +7,7 @@ class Garden < Formula
 
   depends_on "borkdude/brew/babashka"
 
-  install do
+  def install
     bin.install "garden"
   end
 
