@@ -16,7 +16,7 @@ mv cli.jar "$tmpdir"
 cd "$tmpdir"
 for arch in macos-aarch64 macos-amd64 linux-aarch64-static linux-amd64-static; do
     echo "Building for ${arch}"
-    curl -o bb.tar.gz -sL "https://github.com/babashka/babashka-dev-builds/releases/download/v${bb_version}/babashka-${bb_version}-${arch}.tar.gz"
+    curl -o bb.tar.gz -sL "https://github.com/babashka/babashka/releases/download/v${bb_version}/babashka-${bb_version}-${arch}.tar.gz"
     tar xzf bb.tar.gz
     cat ./bb cli.jar > garden
     chmod +x garden

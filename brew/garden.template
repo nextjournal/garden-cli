@@ -7,7 +7,9 @@ class Garden < Formula
 
   depends_on "borkdude/brew/babashka"
 
-  binary "garden"
+  install do
+    bin.install "garden"
+  end
 
   test do
     system "#{bin}/garden", "--version"

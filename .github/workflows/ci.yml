@@ -43,7 +43,7 @@ jobs:
       - name: Tag releases
         # find all commits since last version tag that touch resources/VERSION and tag them with a version based on the contents of resources/VERSION
         run: |
-          lastTaggedRelease=$(git describe --match=v* --tags --abbrev=0 || git rev-list --max-parents=0 HEAD)
+          lastTaggedRelease=$(git describe --match="v*" --tags --abbrev=0 || git rev-list --max-parents=0 HEAD)
           commits=$(git log --format=%H "$lastTaggedRelease.." resources/VERSION)
           echo $commits | while read commit; do
             version="$(git show "$commit:resources/VERSION")"
