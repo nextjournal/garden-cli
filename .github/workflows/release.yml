@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - v*
+
+jobs:
+  build-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install babashka
+        run: |
+          bash < <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/install)
+
+      - name: Build standalone cli
+        run: |
+          ./static-cli.sh target
+
+      - name: Build bb dependent launcher
+        id: portable-build
+        run: |
+          ./build.sh target
+          echo "sha256=" >> $GITHUB_OUTPUT
+
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: target/*
+
+      - name: Update brew formula
+        run: |
+          ./brew/update.sh $(cat resources/VERSION) $(cat target/garden.tar.gz.sha256) ${{secrets.CLASSIC_REPO_TOKEN}}

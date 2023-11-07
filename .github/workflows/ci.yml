@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -13,8 +15,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
         with:
-          # fetch all history to get the commits required for extracting the subtree
+          # fetch all history to get the commits required for tagging releases
           fetch-depth: 0
+          # use a PAT instead of GITHUB_TOKEN to push the tags to trigger the release worflow when pushing tags
+          # https://stackoverflow.com/questions/75348291/how-to-trigger-github-actions-workflow-whenever-a-new-tag-was-pushed
+          token: ${{secrets.CLASSIC_REPO_TOKEN}}
 
       - name: Install babashka
         run: |
@@ -24,14 +29,24 @@ jobs:
         run: |
           ./static-cli.sh target
 
+      - name: Build bb dependent launcher
+        id: portable-build
+        run: |
+          ./build.sh target
+          echo "sha256=$(cat target/garden.tar.gz.sha256)" >> $GITHUB_OUTPUT
+
       - name: Upload build
         uses: actions/upload-artifact@v3
         with:
-          name: garden-x86_64-linux-static
-          path: target/garden
+          path: target/*
 
-      - name: Create release
-        if: startsWith(github.ref,'refs/tags/v')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: target/garden
+      - name: Tag releases
+        # find all commits since last version tag that touch resources/VERSION and tag them with a version based on the contents of resources/VERSION
+        run: |
+          lastTaggedRelease=$(git describe --match=v* --tags --abbrev=0 || git rev-list --max-parents=0 HEAD)
+          commits=$(git log --format=%H "$lastTaggedRelease.." resources/VERSION)
+          echo $commits | while read commit; do
+            version="$(git show "$commit:resources/VERSION")"
+            git tag "v$version" "$commit"
+          done
+          git push --tags

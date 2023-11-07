@@ -1,7 +1,7 @@
 #!/usr/bin/env bb
 ;; -*- mode: clojure -*-
 ;; launch nrepl from project `bb --config <path-to-garden-cli>/bb.edn nrepl-server `
-(ns garden
+(ns nextjournal.garden-cli
   (:refer-clojure :exclude [pr-str])
   (:require [babashka.cli :as cli]
             [babashka.fs :as fs]
@@ -10,18 +10,19 @@
             [clojure.string :as str]
             [clojure.edn :as edn]
             [clojure.pprint :as pp]
-            [org.corfield.new :as deps-new]
             [cheshire.core :as json]
             [clojure.java.io :as io]))
 
-(def version (or (try (slurp (io/resource "VERSION"))
-                      (catch Exception e nil))
-                 (try (let [{:keys [exit out]} (sh ["git" "describe" "--tags" "--match" "v*"] {:dir (str (fs/parent *file*))
-                                                                       :out :string})]
-                        (when (zero? exit)
-                          out))
-                      (catch Exception e nil))
-                 "version-not-set"))
+(def version (let [semver (try (str/trim (slurp (io/resource "VERSION")))
+                               (catch Exception e nil))
+                   gitrev (try (or (let [{:keys [exit out]} (sh ["git" "rev-parse" "--short" "HEAD"] {:dir (str (fs/parent *file*))
+                                                                                                   :out :string})]
+                                     (when (zero? exit)
+                                       (str/trim out))
+                                     (System/getProperty "nextjournal.garden.rev")))
+                               (catch Exception e nil))
+                   version (str "v" semver (when gitrev (str "-" gitrev)))]
+               version))
 
 (defn print-version [_]
   (println version))
@@ -81,10 +82,7 @@
   (fs/delete-if-exists "garden.edn"))
 
 (defn template [target-dir]
-  (deps-new/create {:template 'nextjournal/garden-template
-                    :name "garden"
-                    :target-dir target-dir
-                    :overwrite true}))
+  (fs/copy-tree (fs/path (io/resource "project-template")) target-dir {:replace-existing true}))
 
 (defn project-dir []
   (fs/cwd))

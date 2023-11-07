@@ -1,0 +1,15 @@
+class Garden < Formula
+  desc "CLI for application.garden"
+  homepage "application.garden"
+  url "https://github.com/nextjournal/garden-cli/releases/download/${VERSION}/garden.tar.gz"
+  version "${VERSION}"
+  sha256 "${SHA256}"
+
+  depends_on "borkdude/brew/babashka"
+
+  binary "garden"
+
+  test do
+    system "#{bin}/garden", "--version"
+  end
+end
