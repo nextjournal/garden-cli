@@ -1,7 +1,7 @@
 class Garden < Formula
   desc "CLI for application.garden"
   homepage "application.garden"
-  url "https://github.com/nextjournal/garden-cli/releases/download/${VERSION}/garden.tar.gz"
+  url "https://github.com/nextjournal/garden-cli/releases/download/v${VERSION}/garden.tar.gz"
   version "${VERSION}"
   sha256 "${SHA256}"
 
