@@ -14,7 +14,7 @@ bb uberjar cli.jar -m nextjournal.garden-cli
 tmpdir="$(mktemp -d)"
 mv cli.jar "$tmpdir"
 cd "$tmpdir"
-for arch in macos-aarch64 macos-amd64 linux-aarch64-static linux-amd64 linux-amd64-static; do
+for arch in macos-aarch64 macos-amd64 linux-aarch64-static linux-amd64-static; do
     echo "Building for ${arch}"
     curl -o bb.tar.gz -sL "https://github.com/babashka/babashka-dev-builds/releases/download/v${bb_version}/babashka-${bb_version}-${arch}.tar.gz"
     tar xzf bb.tar.gz
