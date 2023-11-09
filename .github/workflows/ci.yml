@@ -45,7 +45,7 @@ jobs:
         run: |
           lastTaggedRelease=$(git describe --match="v*" --tags --abbrev=0 || git rev-list --max-parents=0 HEAD)
           commits=$(git log --format=%H "$lastTaggedRelease.." resources/VERSION)
-          echo $commits | while read commit; do
+          [ -z $commits ] || echo $commits | while read commit; do
             version="$(git show "$commit:resources/VERSION")"
             git tag "v$version" "$commit"
           done
