@@ -413,7 +413,8 @@
                             :ex-msg (constantly "secret names must only contain alphanumeric characters or underscores")}}})
 
 (def table
-  [{:cmds ["init"] :fn init :spec (-> default-spec
+  [{:cmds [] :fn #'help}
+   {:cmds ["init"] :fn init :spec (-> default-spec
                                       (update :project dissoc :required?)
                                       (assoc :force {:ref "<boolean>"
                                                      :desc "By-passes an existing `garden.edn` found the repository and re-initializes the project with a new name."}))
@@ -464,12 +465,14 @@
                           :required? true
                           :desc "The domain"})
     :help "Publish your project to a custom domain"}
+   {:cmds ["secrets"] :fn (fn [_] (help {:cmds ["secrets"]})) :help "Manage secrets"}
    {:cmds ["secrets" "add"] :fn add-secret :args->opts [:secret-name]
     :help "Adds a secret to a project"
     :spec (assoc (merge default-spec secrets-spec) :force {:coerce :boolean})}
    {:cmds ["secrets" "remove"] :fn remove-secret :args->opts [:secret-name]
     :help "Removes a secret from a project" :spec (merge default-spec secrets-spec)}
    {:cmds ["secrets" "list"] :fn list-secrets :spec default-spec :help "List all secrets for a project"}
+   {:cmds ["groups"] :fn (fn [_] (help {:cmds ["groups"]})) :help "Manage groups"}
    {:cmds ["groups" "list"] :fn list-groups :help "Returns the groups you are part of"}
    {:cmds ["groups" "create"] :fn create-group
     :help "Creates a group"
@@ -509,14 +512,24 @@
                                     :required? true
                                     :desc "The group we wish to remove a project from."}))}
    {:cmds ["help"] :fn #'help :help "Show help for a command"}
-   {:cmds ["version"] :fn #'print-version :help "Print garden cli version"}
-   {:cmds [] :fn #'help}])
+   {:cmds ["version"] :fn #'print-version :help "Print garden cli version"}])
 
 (defn signature [{:as command :keys [cmds args->opts]}]
   (str/join " " (concat cmds (map #(str "<" (name %) ">") args->opts))))
 
 (defn help-text [{:as command :keys [help]}]
   help)
+
+(defn subcommand-help-text [{:as command :keys [cmds]}]
+  (let [subcommands (filter (fn [c] (= cmds (drop-last (:cmds c)))) table)]
+    (when (seq subcommands)
+      (cli/format-table
+       {:rows (mapv (fn [c] [(signature c) (help-text c)]) subcommands)
+        :indent 0}))))
+
+#_(subcommand-help-text {:cmds ["version"]} )
+#_(subcommand-help-text {:cmds ["secrets"]} )
+#_(subcommand-help-text {:cmds ["secrets" "add"]} )
 
 (defn print-options [command]
   (let [options-help (cli/format-opts command)]
@@ -525,11 +538,38 @@
       (println "Options:")
       (println options-help))))
 
+(defn print-command-help [command]
+  (println)
+  (if-let [subcommand-help (subcommand-help-text command)]
+    (do (println (help-text command))
+        (println)
+        (println subcommand-help))
+    (println (signature command) "\t" (help-text command)))
+  (print-options command))
+
+(defn print-command-overview []
+  (println)
+  (println "The Garden CLI currently supports these commands:")
+  (println)
+  (println (cli/format-table {:rows (->> table
+                                         (filter (fn [{:as command :keys [cmds]}] (= 1 (count cmds))))
+                                         (mapv (fn [{:as command :keys [cmds]}]
+                                                 [(first cmds) (help-text command)])))
+                              :indent 2}))
+  (println)
+  (println "Run `garden help <cmd>` for help on specific options.")
+  (println))
+
+(defn help [{:keys [args]}]
+  (let [{:as command :keys [cmds]} (first (filter #(= args (:cmds %)) table))]
+    (if (seq cmds)
+      (print-command-help command)
+      (print-command-overview))))
+
 (defn wrap-with-help [command]
   (update command :fn (fn [f] (fn [{:as m :keys [opts]}]
                                 (if (:help opts)
-                                  (do (println (help-text command))
-                                      (print-options command))
+                                  (print-command-help command)
                                   (f m))))))
 
 (defn dev-null-print-writer []
@@ -567,25 +607,6 @@
   (let [[prefix suffix] (split-at (count a) b)]
     (when (= prefix a)
       suffix)))
-
-(defn help [{:keys [args]}]
-  (let [{:as command :keys [cmds]} (some #(when (split (:cmds %) args) %) table)]
-    (if (seq cmds)
-      (do
-        (println)
-        (println (signature command) "\t" (help-text command))
-        (print-options command))
-      (let [max-length (apply max (map (comp count (partial str/join " ") :cmds) table))]
-        (println)
-        (println "The Garden CLI currently supports these commands:")
-        (println)
-        (doseq [{:as command :keys [cmds]} table]
-          (when (seq cmds)
-            (let [cmd (str/join " " cmds)]
-              (println (str "\t" cmd (pad cmd max-length) (help-text command))))))
-        (println)
-        (println "Run `garden help <cmd>` for help on specific options.")
-        (println)))))
 
 (defn ->option [[k v]] [(str "--" (name k)) (str v)])
 
@@ -639,22 +660,25 @@
 (defmacro with-exception-reporting [& body]
   `(try
      ~@body
-     (catch clojure.lang.ExceptionInfo e
-       (when (try (parse-boolean (System/getenv "DEBUG")) (catch Exception e false))
-         (throw e))
-       (binding [*out* *err*] (println (ex-message e)))
+     (catch clojure.lang.ExceptionInfo e#
+       (when (try (parse-boolean (System/getenv "DEBUG")) (catch Exception _# false))
+         (throw e#))
+       (binding [*out* *err*] (println (ex-message e#)))
        (System/exit 1))))
 
 (defn -main [& args]
-  (with-exception-reporting
-    (migrate-config-file!)
-    (let [{:keys [args error]} (conform-arguments table *command-line-args*)]
-      (if args
-        (cli/dispatch (map (comp wrap-with-exit-code
-                                 wrap-with-output-format
-                                 wrap-with-quiet
-                                 wrap-with-help) table) args)
-        (print-error error)))))
+  ;reverse so longer (i.e. more specific) cmds come first
+  (let [table (reverse table)]
+    (with-exception-reporting
+      (migrate-config-file!)
+      (let [{:keys [args error]} (conform-arguments table *command-line-args*)]
+        (if args
+          (cli/dispatch (map (comp wrap-with-exit-code
+                                   wrap-with-output-format
+                                   wrap-with-quiet
+                                   wrap-with-help)
+                             table) args)
+          (print-error error))))))
 
 (when (= *file* (System/getProperty "babashka.file"))
   (-main))
