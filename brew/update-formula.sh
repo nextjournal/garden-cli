@@ -1,9 +1,9 @@
 #!/usr/bin/env sh
 set -ex
-VERSION="$1"
-SHA256="$2"
-PAT="$3"
-template="$(readlink -f "$(dirname "$0")/garden.template")"
+PAT="$1"
+template="$(readlink -f "$(dirname "$0")/garden-formula.template")"
+VERSION="$(cat "$(readlink -f "$(dirname "$0")/../resources/VERSION")")"
+SHA256="$(curl -L "https://github.com/nextjournal/garden-cli/releases/download/v${VERSION}/garden.tar.gz.sha256")"
 cd "$(mktemp -d)"
 git clone "https://x-access-token:${PAT}@github.com/nextjournal/homebrew-brew"
 cd homebrew-brew

@@ -1,0 +1,13 @@
+cask "garden" do
+  arch arm: "aarch64", intel: "amd64"
+  version "${VERSION}"
+  sha256 arm: "${SHA256_AARCH64}",
+         intel: "${SHA256_AMD64}"
+  url "https://github.com/nextjournal/garden-cli/releases/download/v#{version}/garden-macos-#{arch}.tar.gz",
+      verified: "https://github.com/nextjournal/garden-cli"
+  name "application.garden command line interface"
+  name "garden"
+  desc "CLI for application.garden"
+  homepage "https://application.garden"
+  binary "garden"
+end

@@ -18,7 +18,7 @@ jobs:
 
       - name: Build standalone cli
         run: |
-          ./static-cli.sh target
+          ./standalone-build.sh target
 
       - name: Build bb dependent launcher
         id: portable-build
@@ -33,4 +33,8 @@ jobs:
 
       - name: Update brew formula
         run: |
-          ./brew/update.sh $(cat resources/VERSION) $(cat target/garden.tar.gz.sha256) ${{secrets.CLASSIC_REPO_TOKEN}}
+          ./brew/update-formula.sh ${{secrets.CLASSIC_REPO_TOKEN}}
+
+      - name: Update brew cask
+        run: |
+          ./brew/update-cask.sh ${{secrets.CLASSIC_REPO_TOKEN}}

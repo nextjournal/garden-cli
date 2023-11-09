@@ -27,7 +27,7 @@ jobs:
 
       - name: Build standalone cli
         run: |
-          ./static-cli.sh target
+          ./standalone-build.sh target
 
       - name: Build bb dependent launcher
         id: portable-build
