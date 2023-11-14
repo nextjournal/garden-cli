@@ -148,7 +148,7 @@
             {:keys [ok project message id git-rev]} (call-api (assoc opts :command "create"))]
         (if ok
           (let [_ (when (= :new ok) (println (str "A new project '" project "' has been created.")))
-                _ (println "Pushing code to garden…")
+                _ (println "Pushing code to garden...")
                 {:keys [out err exit]} (sh "git push --force" (git-remote-url id) (str git-ref ":___garden_deploy___"))]
             (if-not (zero? exit)
               (println (str "Cannot push to garden\n" out "\n" err "\n"))
@@ -325,7 +325,7 @@
           (if old-port
             (spit ".nrepl-port" old-port)
             (fs/delete-if-exists ".nrepl-port"))
-          (println "…bye 👋."))))))
+          (println "Tunnel closed"))))))
 
 (defn add-secret [{:keys [opts]}]
   (if (and (not (:force opts))
@@ -393,11 +393,12 @@
   {:project {:ref "<project-name>"
              :required? true
              ;; this is not bb.cli `:require` as we do not want to throw, see `conform-arguments` below
-             :message "Command '%s' needs either a --project option or has to be run inside a garden project."
-             :desc "The project name. Defaults to the `:project` entry in your `garden.edn` file."}
+             :message "Command '%s' needs either a --project option or has to be run inside an application.garden project."
+             :desc "The project name"
+             :default-desc "`:project` from `garden.edn`"}
    :quiet {:coerce :boolean
            :alias :q
-           :desc "Don't print output"}
+           :desc "Do not print output"}
    :output-format (let [valid-formats #{:edn :json}]
                     {:ref "<output-format>"
                      :coerce :keyword
@@ -417,48 +418,53 @@
    {:cmds ["init"] :fn init :spec (-> default-spec
                                       (update :project dissoc :required?)
                                       (assoc :force {:ref "<boolean>"
-                                                     :desc "By-passes an existing `garden.edn` found the repository and re-initializes the project with a new name."}))
-    :help "Set up a garden project in the local directory."}
+                                                     :desc "Ignore an existing `garden.edn` and re-initialize the project with a new name"}))
+    :help "Initialize an application.garden project in the local directory"}
    {:cmds ["deploy"] :fn deploy
-    :help "Deploy a git ref to Garden."
+    :help "Deploy a project to application.garden"
     :spec (-> default-spec (dissoc :output-format)
-              (assoc-in [:project :desc] "The project to be deployed. A new project will be created if it doesn't exist yet.")
+              (assoc-in [:project :desc] "The project to be deployed. A new project will be created if it does not exist yet")
               (assoc :git-ref {:ref "<git-ref>"
                                :default "HEAD"
-                               :desc "The git branch, commit, tag, etc. to be deployed, defaults to HEAD."}
-                     :force {:desc "Starts a deployment regardless of the project's code being changed from the last deploy."}
+                               :desc "The git branch, commit, tag, etc. to be deployed"}
+                     :force {:desc "Force a deployment, even when the code has not changed since the last deploy"}
                      :deploy-strategy {:ref "<mode>"
                                        :coerce :keyword
                                        :default :zero-downtime
                                        :validate #{:zero-downtime :restart}
-                                       :desc "Specifies whether the current deployment should be stopped _before_ starting the new version (`:restart`) or if it should be stopped only when the new instance is ready (`:zero-downtime`). Defaults to `:zero-downtime`."}))}
+                                       :desc "How to deploy a new version: stop old instance before starting new instance (restart), stop old instance after new instance is ready (zero-downtime)"
+                                       ; needs support for multiline descriptions in format-opts
+                                       #_(str/join "\n" ["How to deploy a new version:"
+                                                         " - restart: stop old instance before starting new instance"
+                                                         " - zero-downtime: stop old instance after new instance is ready"])}))}
    {:cmds ["list"] :fn list-projects :spec (dissoc default-spec :project)
-    :help "List your current projects and their status"}
+    :help "List your projects and their status"}
    {:cmds ["info"] :fn info :spec default-spec
     :help "Show information about a project"}
    {:cmds ["log"] :fn log :spec default-spec
-    :help "Forward the log for a project to stdout"}
+    :help "Show a project's log on stdout"}
    {:cmds ["restart"] :fn restart :spec default-spec
     :help "Restart a project in your garden"}
    {:cmds ["stop"] :fn stop :spec default-spec
     :help "Stop the application in your garden"}
    {:cmds ["stop-all"] :fn stop-all
     :help "Stop every application in your garden (!)"}
-   {:cmds ["delete"] :fn delete :spec (assoc default-spec :force {:coerce :boolean :desc "Don't ask for confirmation"})
+   {:cmds ["delete"] :fn delete :spec (assoc default-spec :force {:coerce :boolean :desc "Do not ask for confirmation"})
     :help "Stop the application and remove all project data from your garden (!)"}
    {:cmds ["rename"] :fn rename :args->opts [:new-project-name]
-    :spec (assoc default-spec
-                 :new-project-name {:ref "<new-name>"
-                                    :required? true
-                                    :desc "A new project name"})
-    :help "Rename the current project to `new-project-name`"}
+    :spec (-> default-spec
+              (assoc :new-project-name {:ref "<new-name>"
+                                        :required? true
+                                        :desc "New project name"})
+              (assoc-in [:project :desc] "Old project name"))
+    :help "Rename a project"}
    {:cmds ["tunnel"] :args->opts [:port] :fn tunnel
-    :help "Open a tunnel from the specified port onto the project's remote service socket"
+    :help "Open a tunnel to an nREPL server in the application"
     :spec (assoc default-spec
                  :port {:ref "<port>" :required? false
-                        :desc "The local TCP port to be forwarded"})}
+                        :desc "The local TCP port to tunnel to the remote nREPL port"})}
    {:cmds ["sftp"] :fn sftp
-    :help "Spawn a SFTP session to your project storage"}
+    :help "Spawn a SFTP session to your project's persistent storage"}
    {:cmds ["publish"] :args->opts [:domain] :fn publish
     :spec (assoc default-spec
                  :domain {:ref "<domain>"
@@ -467,50 +473,50 @@
     :help "Publish your project to a custom domain"}
    {:cmds ["secrets"] :fn (fn [_] (help {:cmds ["secrets"]})) :help "Manage secrets"}
    {:cmds ["secrets" "add"] :fn add-secret :args->opts [:secret-name]
-    :help "Adds a secret to a project"
+    :help "Add a secret to a project"
     :spec (assoc (merge default-spec secrets-spec) :force {:coerce :boolean})}
    {:cmds ["secrets" "remove"] :fn remove-secret :args->opts [:secret-name]
-    :help "Removes a secret from a project" :spec (merge default-spec secrets-spec)}
+    :help "Remove a secret from a project" :spec (merge default-spec secrets-spec)}
    {:cmds ["secrets" "list"] :fn list-secrets :spec default-spec :help "List all secrets for a project"}
    {:cmds ["groups"] :fn (fn [_] (help {:cmds ["groups"]})) :help "Manage groups"}
-   {:cmds ["groups" "list"] :fn list-groups :help "Returns the groups you are part of"}
+   {:cmds ["groups" "list"] :fn list-groups :help "List the groups you are part of"}
    {:cmds ["groups" "create"] :fn create-group
-    :help "Creates a group"
+    :help "Create a group"
     :spec {:group-handle {:ref "<handle>"
-                          :desc "The group handle identifies a group in group-related commands."
+                          :desc "Unique identifier for a group"
                           :required? true}}}
    {:cmds ["groups" "add-member"] :fn add-group-member
-    :help "Adds a member to a group."
+    :help "Add a member to a group"
     :spec (assoc default-spec
                  :person-nickname {:ref "<nickname>"
-                                   :desc "The person we want to add to the group."
+                                   :desc "The person to be added to the group"
                                    :required? true}
                  :group-handle {:ref "<handle>"
                                 :required? true
-                                :desc "The group we wish to add a member to."})}
+                                :desc "The group to add a member to"})}
    {:cmds ["groups" "remove-member"] :fn remove-group-member
-    :help "Removes a member from a group."
+    :help "Remove a member from a group"
     :spec (assoc default-spec
                  :person-nickname {:ref "<nickname>"
-                                   :desc "The person we want to remove from the group."
+                                   :desc "The person to be removed from the group"
                                    :required? true}
                  :group-handle {:ref "<handle>"
                                 :required? true
-                                :desc "The group we wish to remove a member from"})}
+                                :desc "The group to remove a member from"})}
    {:cmds ["groups" "add-project"] :fn add-project-to-group
-    :help "Adds a project to a group"
+    :help "Add a project to a group"
     :spec (-> default-spec
-              (assoc-in [:project :desc] "The project to be added to the group. Defaults to current project.")
+              (assoc-in [:project :desc] "The project to be added to the group")
               (assoc :group-handle {:ref "<handle>"
                                     :required? true
-                                    :desc "The group we wish to add a project to."}))}
+                                    :desc "The group to add a project to"}))}
    {:cmds ["groups" "remove-project"] :fn remove-project-from-group
-    :help "Removes a project from a group"
+    :help "Remove a project from a group"
     :spec (-> default-spec
-              (assoc-in [:project :desc] "The project to be removed from the group. Defaults to current project.")
+              (assoc-in [:project :desc] "The project to be removed from the group")
               (assoc :group-handle {:ref "<handle>"
                                     :required? true
-                                    :desc "The group we wish to remove a project from."}))}
+                                    :desc "The group to remove a project from"}))}
    {:cmds ["help"] :fn #'help :help "Show help for a command"}
    {:cmds ["version"] :fn #'print-version :help "Print garden cli version"}])
 
@@ -557,7 +563,7 @@
                                                  [(first cmds) (help-text command)])))
                               :indent 2}))
   (println)
-  (println "Run `garden help <cmd>` for help on specific options.")
+  (println "Run `garden help <cmd>` for help on specific options")
   (println))
 
 (defn help [{:keys [args]}]
