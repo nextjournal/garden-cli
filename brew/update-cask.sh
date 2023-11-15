@@ -22,7 +22,7 @@ fi
 cd "$(mktemp -d)"
 git clone "https://x-access-token:${PAT}@github.com/nextjournal/homebrew-brew"
 cd homebrew-brew
-mkdir Casks
+mkdir -p Casks
 cp "$template" Casks/garden.rb
 sed -i "s/\${VERSION}/${VERSION}/g" Casks/garden.rb
 sed -i "s/\${SHA256_AARCH64}/${SHA256_AARCH64}/g" Casks/garden.rb
