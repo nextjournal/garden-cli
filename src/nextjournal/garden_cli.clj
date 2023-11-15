@@ -11,12 +11,13 @@
             [clojure.edn :as edn]
             [clojure.pprint :as pp]
             [cheshire.core :as json]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io]
+            [nextjournal.edit-distance :as edit-distance]))
 
 (def version (let [semver (try (str/trim (slurp (io/resource "VERSION")))
                                (catch Exception e nil))
                    gitrev (try (or (let [{:keys [exit out]} (sh ["git" "rev-parse" "--short" "HEAD"] {:dir (str (fs/parent *file*))
-                                                                                                   :out :string})]
+                                                                                                      :out :string})]
                                      (when (zero? exit)
                                        (str/trim out))
                                      (System/getProperty "nextjournal.garden.rev")))
@@ -291,12 +292,9 @@
         (if (or (:force opts) (guard name))
           (let [{:keys [ok message]} (call-api (assoc opts :command "delete"))]
             (if ok
-              (do
-                (println "Your project has been deleted.")
-                (System/exit 0))
+              (println "Your project has been deleted.")
               (println message)))
-          (do (println "That's not the project name.")
-              (System/exit 1)))))))
+          (print-error "That's not the project name."))))))
 
 (defn free-port
   "Finds an free, unprivileged port.
@@ -391,8 +389,7 @@
 
 (def default-spec
   {:project {:ref "<project-name>"
-             :required? true
-             ;; this is not bb.cli `:require` as we do not want to throw, see `conform-arguments` below
+             :require true
              :message "Command '%s' needs either a --project option or has to be run inside an application.garden project."
              :desc "The project name"
              :default-desc "`:project` from `garden.edn`"}
@@ -407,247 +404,382 @@
 
 (def secrets-spec
   {:secret-name {:ref "<secret-name>"
-                 :required? true
+                 :require true
                  :desc "The secret name"
                  :coerce :string
                  :validate {:pred #(re-matches #"[a-zA-Z_]+" %)
                             :ex-msg (constantly "secret names must only contain alphanumeric characters or underscores")}}})
 
-(def table
-  [{:cmds [] :fn #'help}
-   {:cmds ["init"] :fn init :spec (-> default-spec
-                                      (update :project dissoc :required?)
-                                      (assoc :force {:ref "<boolean>"
-                                                     :desc "Ignore an existing `garden.edn` and re-initialize the project with a new name"}))
-    :help "Initialize an application.garden project in the local directory"}
-   {:cmds ["deploy"] :fn deploy
-    :help "Deploy a project to application.garden"
-    :spec (-> default-spec (dissoc :output-format)
-              (assoc-in [:project :desc] "The project to be deployed. A new project will be created if it does not exist yet")
-              (assoc :git-ref {:ref "<git-ref>"
-                               :default "HEAD"
-                               :desc "The git branch, commit, tag, etc. to be deployed"}
-                     :force {:desc "Force a deployment, even when the code has not changed since the last deploy"}
-                     :deploy-strategy {:ref "<mode>"
-                                       :coerce :keyword
-                                       :default :zero-downtime
-                                       :validate #{:zero-downtime :restart}
-                                       :desc "How to deploy a new version: stop old instance before starting new instance (restart), stop old instance after new instance is ready (zero-downtime)"
-                                       ; needs support for multiline descriptions in format-opts
-                                       #_(str/join "\n" ["How to deploy a new version:"
-                                                         " - restart: stop old instance before starting new instance"
-                                                         " - zero-downtime: stop old instance after new instance is ready"])}))}
-   {:cmds ["list"] :fn list-projects :spec (dissoc default-spec :project)
-    :help "List your projects and their status"}
-   {:cmds ["info"] :fn info :spec default-spec
-    :help "Show information about a project"}
-   {:cmds ["log"] :fn log :spec default-spec
-    :help "Show a project's log on stdout"}
-   {:cmds ["restart"] :fn restart :spec default-spec
-    :help "Restart a project in your garden"}
-   {:cmds ["stop"] :fn stop :spec default-spec
-    :help "Stop the application in your garden"}
-   {:cmds ["stop-all"] :fn stop-all
-    :help "Stop every application in your garden (!)"}
-   {:cmds ["delete"] :fn delete :spec (assoc default-spec :force {:coerce :boolean :desc "Do not ask for confirmation"})
-    :help "Stop the application and remove all project data from your garden (!)"}
-   {:cmds ["rename"] :fn rename :args->opts [:new-project-name]
-    :spec (-> default-spec
-              (assoc :new-project-name {:ref "<new-name>"
-                                        :required? true
-                                        :desc "New project name"})
-              (assoc-in [:project :desc] "Old project name"))
-    :help "Rename a project"}
-   {:cmds ["tunnel"] :args->opts [:port] :fn tunnel
-    :help "Open a tunnel to an nREPL server in the application"
-    :spec (assoc default-spec
-                 :port {:ref "<port>" :required? false
-                        :desc "The local TCP port to tunnel to the remote nREPL port"})}
-   {:cmds ["sftp"] :fn sftp
-    :help "Spawn a SFTP session to your project's persistent storage"}
-   {:cmds ["publish"] :args->opts [:domain] :fn publish
-    :spec (assoc default-spec
-                 :domain {:ref "<domain>"
-                          :required? true
-                          :desc "The domain"})
-    :help "Publish your project to a custom domain"}
-   {:cmds ["secrets"] :fn (fn [_] (help {:cmds ["secrets"]})) :help "Manage secrets"}
-   {:cmds ["secrets" "add"] :fn add-secret :args->opts [:secret-name]
-    :help "Add a secret to a project"
-    :spec (assoc (merge default-spec secrets-spec) :force {:coerce :boolean})}
-   {:cmds ["secrets" "remove"] :fn remove-secret :args->opts [:secret-name]
-    :help "Remove a secret from a project" :spec (merge default-spec secrets-spec)}
-   {:cmds ["secrets" "list"] :fn list-secrets :spec default-spec :help "List all secrets for a project"}
-   {:cmds ["groups"] :fn (fn [_] (help {:cmds ["groups"]})) :help "Manage groups"}
-   {:cmds ["groups" "list"] :fn list-groups :help "List the groups you are part of"}
-   {:cmds ["groups" "create"] :fn create-group
-    :help "Create a group"
-    :spec {:group-handle {:ref "<handle>"
-                          :desc "Unique identifier for a group"
-                          :required? true}}}
-   {:cmds ["groups" "add-member"] :fn add-group-member
-    :help "Add a member to a group"
-    :spec (assoc default-spec
-                 :person-nickname {:ref "<nickname>"
-                                   :desc "The person to be added to the group"
-                                   :required? true}
-                 :group-handle {:ref "<handle>"
-                                :required? true
-                                :desc "The group to add a member to"})}
-   {:cmds ["groups" "remove-member"] :fn remove-group-member
-    :help "Remove a member from a group"
-    :spec (assoc default-spec
-                 :person-nickname {:ref "<nickname>"
-                                   :desc "The person to be removed from the group"
-                                   :required? true}
-                 :group-handle {:ref "<handle>"
-                                :required? true
-                                :desc "The group to remove a member from"})}
-   {:cmds ["groups" "add-project"] :fn add-project-to-group
-    :help "Add a project to a group"
-    :spec (-> default-spec
-              (assoc-in [:project :desc] "The project to be added to the group")
-              (assoc :group-handle {:ref "<handle>"
-                                    :required? true
-                                    :desc "The group to add a project to"}))}
-   {:cmds ["groups" "remove-project"] :fn remove-project-from-group
-    :help "Remove a project from a group"
-    :spec (-> default-spec
-              (assoc-in [:project :desc] "The project to be removed from the group")
-              (assoc :group-handle {:ref "<handle>"
-                                    :required? true
-                                    :desc "The group to remove a project from"}))}
-   {:cmds ["help"] :fn #'help :help "Show help for a command"}
-   {:cmds ["version"] :fn #'print-version :help "Print garden cli version"}])
+(def cmd-tree
+  {"stop"
+   {:fn stop,
+    :spec default-spec,
+    :help "Stop the application in your garden"},
+   "deploy"
+   {:fn deploy,
+    :help "Deploy a project to application.garden",
+    :spec
+    (->
+     default-spec
+     (dissoc :output-format)
+     (assoc-in
+      [:project :desc]
+      "The project to be deployed. A new project will be created if it does not exist yet")
+     (assoc
+      :git-ref
+      {:ref "<git-ref>",
+       :default "HEAD",
+       :desc "The git branch, commit, tag, etc. to be deployed"}
+      :force
+      {:desc
+       "Force a deployment, even when the code has not changed since the last deploy"}
+      :deploy-strategy
+      {:ref "<mode>",
+       :coerce :keyword,
+       :default :zero-downtime,
+       :validate #{:restart :zero-downtime},
+       :desc
+       "How to deploy a new version: stop old instance before starting new instance (restart), stop old instance after new instance is ready (zero-downtime)"}))},
+   "rename"
+   {:fn rename,
+    :args->opts [:new-project-name],
+    :spec
+    (->
+     default-spec
+     (assoc
+      :new-project-name
+      {:ref "<new-name>", :require true, :desc "New project name"})
+     (assoc-in [:project :desc] "Old project name")),
+    :help "Rename a project"},
+   "list"
+   {:fn list-projects,
+    :spec (dissoc default-spec :project),
+    :help "List your projects and their status"},
+   "tunnel"
+   {:args->opts [:port],
+    :fn tunnel,
+    :help "Open a tunnel to an nREPL server in the application",
+    :spec
+    (assoc
+     default-spec
+     :port
+     {:ref "<port>",
+      :require false,
+      :desc "The local TCP port to tunnel to the remote nREPL port"})},
+   "delete"
+   {:fn delete,
+    :spec
+    (assoc
+     default-spec
+     :force
+     {:coerce :boolean, :desc "Do not ask for confirmation"}),
+    :help
+    "Stop the application and remove all project data from your garden (!)"},
+   "info"
+   {:fn info,
+    :spec default-spec,
+    :help "Show information about a project"},
+   "log"
+   {:fn log, :spec default-spec, :help "Show a project's log on stdout"},
+   "publish"
+   {:args->opts [:domain],
+    :fn publish,
+    :spec
+    (assoc
+     default-spec
+     :domain
+     {:ref "<domain>", :require true, :desc "The domain"}),
+    :help "Publish your project to a custom domain"},
+   "stop-all"
+   {:fn stop-all, :help "Stop every application in your garden (!)"},
+   "restart"
+   {:fn restart,
+    :spec default-spec,
+    :help "Restart a project in your garden"},
+   "init"
+   {:fn init,
+    :spec
+    (->
+     default-spec
+     (update :project dissoc :require)
+     (assoc
+      :force
+      {:ref "<boolean>",
+       :desc
+       "Ignore an existing `garden.edn` and re-initialize the project with a new name"})),
+    :help
+    "Initialize an application.garden project in the local directory"},
+   "version" {:fn #'print-version, :help "Print garden cli version"},
+   "help" {:fn #'help, :help "Show help for a command"},
+   "secrets"
+   {:fn (fn [_] (help {:cmds ["secrets"]})),
+    :help "Manage secrets",
+    "add"
+    {:fn add-secret,
+     :args->opts [:secret-name],
+     :help "Add a secret to a project",
+     :spec
+     (assoc
+      (merge default-spec secrets-spec)
+      :force
+      {:coerce :boolean})},
+    "remove"
+    {:fn remove-secret,
+     :args->opts [:secret-name],
+     :help "Remove a secret from a project",
+     :spec (merge default-spec secrets-spec)},
+    "list"
+    {:fn list-secrets,
+     :spec default-spec,
+     :help "List all secrets for a project"}},
+   "groups"
+   {:fn (fn [_] (help {:cmds ["groups"]})),
+    :help "Manage groups",
+    "list" {:fn list-groups, :help "List the groups you are part of"},
+    "create"
+    {:fn create-group,
+     :help "Create a group",
+     :spec
+     {:group-handle
+      {:ref "<handle>",
+       :desc "Unique identifier for a group",
+       :require true}}},
+    "add-member"
+    {:fn add-group-member,
+     :help "Add a member to a group",
+     :spec
+     (assoc
+      default-spec
+      :person-nickname
+      {:ref "<nickname>",
+       :desc "The person to be added to the group",
+       :require true}
+      :group-handle
+      {:ref "<handle>",
+       :require true,
+       :desc "The group to add a member to"})},
+    "remove-member"
+    {:fn remove-group-member,
+     :help "Remove a member from a group",
+     :spec
+     (assoc
+      default-spec
+      :person-nickname
+      {:ref "<nickname>",
+       :desc "The person to be removed from the group",
+       :require true}
+      :group-handle
+      {:ref "<handle>",
+       :require true,
+       :desc "The group to remove a member from"})},
+    "add-project"
+    {:fn add-project-to-group,
+     :help "Add a project to a group",
+     :spec
+     (->
+      default-spec
+      (assoc-in [:project :desc] "The project to be added to the group")
+      (assoc
+       :group-handle
+       {:ref "<handle>",
+        :require true,
+        :desc "The group to add a project to"}))},
+    "remove-project"
+    {:fn remove-project-from-group,
+     :help "Remove a project from a group",
+     :spec
+     (->
+      default-spec
+      (assoc-in
+       [:project :desc]
+       "The project to be removed from the group")
+      (assoc
+       :group-handle
+       {:ref "<handle>",
+        :require true,
+        :desc "The group to remove a project from"}))}},
+   "sftp"
+   {:fn sftp,
+    :help "Spawn a SFTP session to your project's persistent storage"}})
 
-(defn signature [{:as command :keys [cmds args->opts]}]
-  (str/join " " (concat cmds (map #(str "<" (name %) ">") args->opts))))
+(defn keyword-map [m]
+  (select-keys m (filter keyword? (keys m))))
 
-(defn help-text [{:as command :keys [help]}]
-  help)
+(defn ->option [k] (str "--" (name k)))
 
-(defn subcommand-help-text [{:as command :keys [cmds]}]
-  (let [subcommands (filter (fn [c] (= cmds (drop-last (:cmds c)))) table)]
+(defn error-fn [{:as m :keys [cause]}]
+  (print-error
+   (case cause
+     :require (format "Missing option: %s" (->option (:option m)))
+     :validate (format "Invalid value for option %s" (->option (:option m)))
+     :coerce (format "Invalid value for option %s" (->option (:option m)))
+     :restricet (format "Invalid option %s" (->option (:option m)))
+     nil "Error"))
+  (System/exit 1))
+
+(defn deep-merge [a b]
+  (reduce (fn [acc k] (update acc k (fn [v]
+                                      (if (map? v)
+                                        (deep-merge v (b k))
+                                        (b k)))))
+          a (keys b)))
+
+(defn has-parse-opts? [m]
+  (some #{:spec :coerce :require :restrict :validate :args->opts :exec-args} (keys m)))
+
+(defn is-option? [s]
+  (some-> s (str/starts-with? "-")))
+
+(defn dispatch-tree' [tree args opts]
+  (loop [cmds [] all-opts {} args args cmd-info tree]
+    (let [m (keyword-map cmd-info)
+          should-parse-args? (or (has-parse-opts? m)
+                                 (is-option? (first args)))
+          parse-opts (deep-merge opts m)
+          {:keys [args opts]} (if should-parse-args?
+                                (cli/parse-args args parse-opts)
+                                {:args args
+                                 :opts {}})
+          [arg & rest] args]
+      (if-let [subcmd-info (get cmd-info arg)]
+        (recur (conj cmds arg) (merge all-opts opts) rest subcmd-info)
+        (if (:fn cmd-info)
+          {:cmd-info cmd-info
+           :dispatch cmds
+           :opts (merge all-opts opts)
+           :args args}
+          (if arg
+            {:error :no-match
+             :dispatch cmds
+             :wrong-input arg
+             :available-commands (sort (filter string? (keys cmd-info)))}
+            {:error :input-exhausted
+             :dispatch cmds
+             :available-commands (sort (filter string? (keys cmd-info)))}))))))
+
+(defn dispatch' [cmd-tree args]
+  (dispatch-tree' cmd-tree args {:exec-args (read-config)
+                                 :error-fn error-fn}))
+
+(comment
+  (= :input-exhausted (:error (dispatch' cmd-tree [])))
+  (= :no-match (:error (dispatch' cmd-tree ["foo"])))
+  (dispatch' cmd-tree ["help" "list"]))
+
+(defn indent
+  "indent a multiline string by <indent> spaces"
+  [indent lines]
+  (->> (str/split-lines lines)
+       (map (fn [line] (str (apply str (repeat indent " ")) line)))
+       (str/join "\n")))
+
+(defn signature [cmd-tree cmds]
+  (when (seq cmds)
+    (when-let [{:as cmd-info :keys [args->opts]} (get-in cmd-tree cmds)]
+     (str/join " " (concat cmds (map #(str "<" (name %) ">") args->opts))))))
+
+(defn help-text [cmd-tree cmds]
+  (:help (get-in cmd-tree cmds)))
+
+(defn options-text [cmd-tree cmds]
+  (let [s (cli/format-opts (assoc (get-in cmd-tree cmds) :indent 0))]
+    (when-not (str/blank? s)
+      s)))
+
+(defn subcommand-help-text [cmd-tree cmds]
+  (let [subcommands (sort (filter string? (keys (get-in cmd-tree cmds))))]
     (when (seq subcommands)
       (cli/format-table
-       {:rows (mapv (fn [c] [(signature c) (help-text c)]) subcommands)
+       {:rows (mapv (fn [c] (let [subcommand (concat cmds [c])]
+                              [(signature cmd-tree subcommand) (help-text cmd-tree subcommand)]))
+                    subcommands)
         :indent 0}))))
 
-#_(subcommand-help-text {:cmds ["version"]} )
-#_(subcommand-help-text {:cmds ["secrets"]} )
-#_(subcommand-help-text {:cmds ["secrets" "add"]} )
+(defn print-command-help [cmd-tree command]
+  (when-let [s (signature cmd-tree command)]
+    (println s "\t" (help-text cmd-tree command))))
 
-(defn print-options [command]
-  (let [options-help (cli/format-opts command)]
-    (when-not (str/blank? options-help)
-      (println)
-      (println "Options:")
-      (println options-help))))
+(defn print-command-options [cmd-tree command]
+  (when-let [s (options-text cmd-tree command)]
+    (println)
+    (println "Options:")
+    (println (indent 2 s))))
 
-(defn print-command-help [command]
-  (println)
-  (if-let [subcommand-help (subcommand-help-text command)]
-    (do (println (help-text command))
-        (println)
-        (println subcommand-help))
-    (println (signature command) "\t" (help-text command)))
-  (print-options command))
+(defn print-available-commands [cmd-tree command]
+  (when-let [s (subcommand-help-text cmd-tree command)]
+    (println)
+    (println "Available commands:")
+    (println (indent 2 s))))
 
-(defn print-command-overview []
-  (println)
-  (println "The Garden CLI currently supports these commands:")
-  (println)
-  (println (cli/format-table {:rows (->> table
-                                         (filter (fn [{:as command :keys [cmds]}] (= 1 (count cmds))))
-                                         (mapv (fn [{:as command :keys [cmds]}]
-                                                 [(first cmds) (help-text command)])))
-                              :indent 2}))
-  (println)
-  (println "Run `garden help <cmd>` for help on specific options")
-  (println))
+(defn help [{:as m :keys [args]}]
+  (if (get-in cmd-tree args)
+    (do
+      (print-command-help cmd-tree args)
+      (print-command-options cmd-tree args)
+      (print-available-commands cmd-tree args))
+    (do
+      (println "Unknown command")
+      (print-available-commands cmd-tree []))))
 
-(defn help [{:keys [args]}]
-  (let [{:as command :keys [cmds]} (first (filter #(= args (:cmds %)) table))]
-    (if (seq cmds)
-      (print-command-help command)
-      (print-command-overview))))
+(defn dispatch [cmd-tree args {:keys [middleware]}]
+  (let [{:as res :keys [error cmd-info dispatch wrong-input available-commands]} (dispatch' cmd-tree args)]
+    (if error
+      (case error
+        :input-exhausted (print-error (str "Available commands:\n\n" (subcommand-help-text cmd-tree dispatch)))
+        :no-match (print-error (let [candidates (edit-distance/candidates wrong-input available-commands)]
+                                 (if (seq candidates)
+                                   (str "Unknown command. Did you mean one of:\n"
+                                        (indent 2 (str/join "\n" (map
+                                                                  #(str/join " " (concat ["garden"] dispatch [%]))
+                                                                  candidates))))
+                                   (str "Available commands:\n\n" (subcommand-help-text cmd-tree dispatch))))))
+      (let [res (reduce (fn [r m] (m r)) res middleware)]
+        ((get-in res [:cmd-info :fn]) res)))))
 
-(defn wrap-with-help [command]
-  (update command :fn (fn [f] (fn [{:as m :keys [opts]}]
-                                (if (:help opts)
-                                  (print-command-help command)
-                                  (f m))))))
+(defn wrap-with-help [{:as res :keys [dispatch]}]
+  (update-in res [:cmd-info :fn] (fn [f] (fn [{:as m :keys [opts]}]
+                                         (if (:help opts)
+                                           (help {:args dispatch})
+                                           (f m))))))
 
 (defn dev-null-print-writer []
   (java.io.PrintWriter. "/dev/null"))
 
-(defn wrap-with-quiet [command]
-  (update command :fn (fn [f]
-                        (fn [{:as m :keys [opts]}]
-                          (if (:quiet opts)
-                            (binding [*out* (dev-null-print-writer)
-                                      *err* (dev-null-print-writer)]
-                              (f m))
-                            (f m))))))
+(defn wrap-with-quiet [res]
+  (update-in res [:cmd-info :fn]
+             (fn [f]
+               (fn [{:as m :keys [opts]}]
+                 (if (:quiet opts)
+                   (binding [*out* (dev-null-print-writer)
+                             *err* (dev-null-print-writer)]
+                     (f m))
+                   (f m))))))
 
-(defn wrap-with-output-format [command]
-  (update command :fn (fn [f]
-                        (fn [{:as m :keys [opts]}]
-                          (if-let [output-format (:output-format opts)]
-                            (let [result (f (assoc-in m [:opts :quiet] true))]
-                              (case output-format
-                                :edn (prn result)
-                                :json (println (json/encode result))))
-                            (f m))))))
+(defn wrap-with-output-format [res]
+  (update-in res [:cmd-info :fn]
+             (fn [f]
+               (fn [{:as m :keys [opts]}]
+                 (if-let [output-format (:output-format opts)]
+                   (let [result (f (assoc-in m [:opts :quiet] true))]
+                     (case output-format
+                       :edn (prn result)
+                       :json (println (json/encode result))))
+                   (f m))))))
 
-(defn wrap-with-exit-code [command]
-  (update command :fn (fn [f]
-                        (fn [m]
-                          (let [{:as result :keys [exit-code]} (f m)]
-                            (if exit-code
-                              (System/exit exit-code)
-                              result))))))
+(defn wrap-with-exit-code [res]
+  (update-in res [:cmd-info :fn]
+             (fn [f]
+               (fn [m]
+                 (let [{:as result :keys [exit-code]} (f m)]
+                   (if exit-code
+                     (System/exit exit-code)
+                     result))))))
 
 ;; copied from private bb cli fn
 (defn split [a b]
   (let [[prefix suffix] (split-at (count a) b)]
     (when (= prefix a)
       suffix)))
-
-(defn ->option [[k v]] [(str "--" (name k)) (str v)])
-
-(defn conform-arguments
-  "Validates and fills in missing CLI arguments when they can be inferred from project configuration."
-  [table command-line-arguments]
-  (let [{:keys [cmds args]} (cli/parse-cmds command-line-arguments)
-        {:as match dispatch :cmds :keys [spec suffix]}
-        (some #(when-some [suffix (split (:cmds %) cmds)]
-                 (assoc % :suffix suffix)) table)]
-    (if (empty? dispatch)
-      {:args ()}
-      (let [cfg (read-config)
-            {:keys [args opts]} (cli/parse-args (concat suffix args)
-                                                ;; we dissoc from spec the default values that we already have in the config
-                                                ;; otherwise they'll override the merge below
-                                                (update match :spec (partial reduce #(update %1 %2 dissoc :default)) (keys cfg)))
-            merged (merge (select-keys cfg (keys spec)) opts)]
-        (if-some [missing (when-not (contains? merged :help)
-                            (some (fn [[k {:keys [required? message]}]]
-                                    (when (and required? (not (contains? merged k)))
-                                      (or message (str "Command '%s' needs a --" (name k) " option.")))) spec))]
-
-          {:error (format missing (first dispatch))}
-          {:args (concat dispatch args (mapcat ->option merged))})))))
-
-#_(conform-arguments table '("log"))
-#_(conform-arguments table '("rename"))
-#_(conform-arguments table '("rename" "--new-name" "hello"))
-#_(conform-arguments table '("rename" "hello"))
-#_(read-config)
-#_(conform-arguments table '("deploy" "--force"))
-#_(conform-arguments table '("deploy" "--force" "--deploy-strategy" ":zero-downtime"))
-#_(conform-arguments table '("deploy" "--force" "--deploy-strategy" ":restart"))
-#_(conform-arguments table '("deploy" "--force"))
 
 (defn migrate-config-file! []
   (when (fs/exists? ".garden.edn")
@@ -673,18 +805,12 @@
        (System/exit 1))))
 
 (defn -main [& args]
-  ;reverse so longer (i.e. more specific) cmds come first
-  (let [table (reverse table)]
-    (with-exception-reporting
-      (migrate-config-file!)
-      (let [{:keys [args error]} (conform-arguments table *command-line-args*)]
-        (if args
-          (cli/dispatch (map (comp wrap-with-exit-code
-                                   wrap-with-output-format
-                                   wrap-with-quiet
-                                   wrap-with-help)
-                             table) args)
-          (print-error error))))))
+  (with-exception-reporting
+    (migrate-config-file!)
+    (dispatch cmd-tree *command-line-args* {:middleware [wrap-with-help
+                                                         wrap-with-quiet
+                                                         wrap-with-exit-code
+                                                         wrap-with-output-format]})))
 
 (when (= *file* (System/getProperty "babashka.file"))
   (-main))
