@@ -1,4 +1,4 @@
 {:min-bb-version "1.3.186"
  :paths ["src" "resources"]
  :deps {nextjournal/arboretum-cli {:local/root "."}}
- :bbin/bin {garden {:main-opts ["-f" "garden"]}}}
+ :bbin/bin {garden {:main-opts ["-f" "src/nextjournal/garden_cli.clj"]}}}
