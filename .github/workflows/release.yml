@@ -31,11 +31,10 @@ jobs:
         with:
           files: target/*
 
-#     We only support casks to prevent issues with out of date babashka
-#     - name: Update brew formula
-#       run: |
-#         ./brew/update-formula.sh ${{secrets.CLASSIC_REPO_TOKEN}}
-
-      - name: Update brew cask
+      - name: Update brew formula
         run: |
-          ./brew/update-cask.sh ${{secrets.CLASSIC_REPO_TOKEN}}
+          ./brew/update-formula.sh ${{secrets.CLASSIC_REPO_TOKEN}}
+
+#      - name: Update brew cask
+#        run: |
+#          ./brew/update-cask.sh ${{secrets.CLASSIC_REPO_TOKEN}}
