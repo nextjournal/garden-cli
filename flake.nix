@@ -34,7 +34,7 @@
       }
     );
     overlays.default = final: prev: {
-      garden = final.callPackage ./nix/garden.nix { rev = self.shortRev or "undefined"; };
+      garden = final.callPackage ./nix/garden.nix {rev = self.shortRev or "undefined";};
     };
   };
 }
