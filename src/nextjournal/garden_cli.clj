@@ -328,8 +328,8 @@
   (if (and (not (:force opts))
            (some #{(:secret-name opts)}
                  (:secrets (call-api (assoc opts :command "list-secrets")))))
-    (println (format "A secret with the same name already exist. Use `garden secrets add %s --force` to overwrite it."
-                     (:secret-name opts)))
+    (print-error (format "A secret with the same name already exist. Use `garden secrets add %s --force` to overwrite it."
+                         (:secret-name opts)))
     (let [{:keys [ok message]}
           (call-api (assoc opts :command "add-secret"
                            :secret-value (or (when-some [c (System/console)]
