@@ -116,7 +116,7 @@
       (when (empty? (filter #(not= ".git" %) (map fs/file-name (fs/list-dir (project-dir)))))
         (template target-dir))
       (if (garden-project?)
-        (println "It seems you have already initialized a Garden project in this repository. Use --force to overwrite.")
+        (print-error "It seems you have already initialized a Garden project in this repository. Use --force to overwrite.")
 
         ;; we might have cloned a repo tracking `garden.edn`: we validate the project name against the server anyway
         (let [{:keys [ok message id project]} (call-api (cond-> {:command "create"}
