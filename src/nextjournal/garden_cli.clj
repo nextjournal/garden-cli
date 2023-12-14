@@ -114,7 +114,6 @@
                            (when-not (:force opts) (project-name)))]
       (when (:force opts) (reset))
       (when (empty? (filter #(not= ".git" %) (map fs/file-name (fs/list-dir (project-dir)))))
-        (println "Found empty dir (except for .git)")
         (template target-dir))
       (if (garden-project?)
         (println "It seems you have already initialized a Garden project in this repository. Use --force to overwrite.")
