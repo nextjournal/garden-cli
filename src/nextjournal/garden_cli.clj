@@ -541,6 +541,7 @@
     "create"
     {:fn create-group,
      :help "Create a group",
+     :args->opts [:group-handle]
      :spec
      {:group-handle
       {:ref "<handle>",
@@ -548,7 +549,8 @@
        :require true}}},
     "add-member"
     {:fn add-group-member,
-     :help "Add a member to a group",
+     :help "Add a member to a group"
+     :args->opts [:group-handle],
      :spec
      (assoc
       default-spec
@@ -562,7 +564,8 @@
        :desc "The group to add a member to"})},
     "remove-member"
     {:fn remove-group-member,
-     :help "Remove a member from a group",
+     :help "Remove a member from a group"
+     :args->opts [:group-handle],
      :spec
      (assoc
       default-spec
@@ -576,7 +579,8 @@
        :desc "The group to remove a member from"})},
     "add-project"
     {:fn add-project-to-group,
-     :help "Add a project to a group",
+     :help "Add a project to a group"
+     :args->opts [:group-handle],
      :spec
      (->
       default-spec
@@ -588,7 +592,8 @@
         :desc "The group to add a project to"}))},
     "remove-project"
     {:fn remove-project-from-group,
-     :help "Remove a project from a group",
+     :help "Remove a project from a group"
+     :args->opts [:group-handle],
      :spec
      (->
       default-spec
