@@ -332,10 +332,13 @@
                          (:secret-name opts)))
     (let [{:keys [ok message]}
           (call-api (assoc opts :command "add-secret"
-                           :secret-value (or (when-some [c (System/console)]
-                                               (println "Type your secret and press Enter:")
-                                               (String. (.readPassword c)))
-                                             (read-line))))]
+                           :secret-value (do
+                                           (println "Type your secret and press Enter:")
+                                           (or
+                                            ;;FIXME reenable when https://github.com/oracle/graal/issues/7567 is fixed
+                                            #_(when-some [c (System/console)]
+                                                (String. (.readPassword c)))
+                                            (read-line)))))]
       (if ok
         (println "Secret added successfully. Note that users with access to this project will be able to use/see your secrets.")
         (println message)))))
