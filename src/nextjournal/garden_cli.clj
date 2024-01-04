@@ -6,6 +6,7 @@
   (:require [babashka.cli :as cli]
             [babashka.fs :as fs]
             [babashka.process :refer [shell sh]]
+            [babashka.http-client :as http]
             [clojure.core :as core]
             [clojure.string :as str]
             [clojure.edn :as edn]
@@ -133,6 +134,33 @@
               (update-config! assoc :project project))
 
             (print-error message)))))))
+
+(defn run [_]
+  (println "Starting application locally...")
+  (let [http-port 7777
+        url (str "http://localhost:" http-port)
+        repl-port 6666
+        storage-dir ".garden/storage"
+        timeout-seconds 10]
+    (doto (Thread. (fn [] (loop [time-left timeout-seconds]
+                            (let [sleep-seconds 1]
+                              (Thread/sleep (* sleep-seconds 1000))
+                              (if (try (<= 200
+                                           (:status (http/head url {:client (http/client {:follow-redirects :never})}))
+                                           399)
+                                       (catch Throwable _ false))
+                                (println "Application ready on" url)
+                                (if (>= time-left 0)
+                                  (recur (- time-left sleep-seconds))
+                                  (do
+                                    (println (format "Application did not start after %s." timeout-seconds))
+                                    (System/exit 1))))))))
+      .start)
+    (fs/create-dirs storage-dir)
+    (sh ["clojure" "-X:nextjournal/garden"] {:extra-env {"GARDEN_STORAGE" storage-dir
+                                                         "GARDEN_EMAIL_ADDRESS" "just-a-placeholder@example.com"}
+                                             :out :inherit
+                                             :err :inherit})))
 
 (defn deploy [{:keys [opts]}]
   (let [{:keys [git-ref force]} opts
@@ -416,7 +444,11 @@
   {"stop"
    {:fn stop,
     :spec default-spec,
-    :help "Stop the application in your garden"},
+    :help "Stop the application in your garden"}
+   "run"
+   {:fn run,
+    :spec default-spec,
+    :help "Run the application locally"},
    "deploy"
    {:fn deploy,
     :help "Deploy a project to application.garden",
