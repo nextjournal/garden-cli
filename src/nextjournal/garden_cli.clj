@@ -614,15 +614,15 @@
 
 (defn ->option [k] (str "--" (name k)))
 
+(defonce !errors (atom []))
 (defn error-fn [{:as m :keys [cause]}]
-  (print-error
-   (case cause
-     :require (format "Missing option: %s" (->option (:option m)))
-     :validate (format "Invalid value for option %s" (->option (:option m)))
-     :coerce (format "Invalid value for option %s" (->option (:option m)))
-     :restricet (format "Invalid option %s" (->option (:option m)))
-     nil "Error"))
-  (System/exit 1))
+  (swap! !errors conj
+         (case cause
+           :require (format "Missing option: %s" (->option (:option m)))
+           :validate (format "Invalid value for option %s" (->option (:option m)))
+           :coerce (format "Invalid value for option %s" (->option (:option m)))
+           :restricet (format "Invalid option %s" (->option (:option m)))
+           nil "Error")))
 
 (defn deep-merge [a b]
   (reduce (fn [acc k] (update acc k (fn [v]
@@ -664,9 +664,8 @@
              :dispatch cmds
              :available-commands (sort (filter string? (keys cmd-info)))}))))))
 
-(defn dispatch' [cmd-tree args]
-  (dispatch-tree' cmd-tree args {:exec-args (read-config)
-                                 :error-fn error-fn}))
+(defn dispatch' [cmd-tree args opts]
+  (dispatch-tree' cmd-tree args opts))
 
 (comment
   (= :input-exhausted (:error (dispatch' cmd-tree [])))
@@ -728,8 +727,8 @@
       (println "Unknown command")
       (print-available-commands cmd-tree []))))
 
-(defn dispatch [cmd-tree args {:keys [middleware]}]
-  (let [{:as res :keys [error cmd-info dispatch wrong-input available-commands]} (dispatch' cmd-tree args)]
+(defn dispatch [cmd-tree args {:as opts :keys [middleware]}]
+  (let [{:as res :keys [error cmd-info dispatch wrong-input available-commands]} (dispatch' cmd-tree args opts)]
     (if error
       (case error
         :input-exhausted (print-error (str "Available commands:\n\n" (subcommand-help-text cmd-tree dispatch)))
@@ -746,7 +745,9 @@
 (defn wrap-with-help [{:as res :keys [dispatch]}]
   (update-in res [:cmd-info :fn] (fn [f] (fn [{:as m :keys [opts]}]
                                          (if (:help opts)
-                                           (help {:args dispatch})
+                                           (do
+                                             (reset! !errors [])
+                                             (help {:args dispatch}))
                                            (f m))))))
 
 (defn dev-null-print-writer []
@@ -773,6 +774,17 @@
                        :json (println (json/encode result))))
                    (f m))))))
 
+(defn wrap-with-error-reporting [res]
+  (update-in res [:cmd-info :fn]
+             (fn [f]
+               (fn [m]
+                 (if-let [errors (seq @!errors)]
+                   (do
+                     (doseq [error errors]
+                       (print-error error))
+                     {:exit-code 1})
+                   (f m))))))
+
 (defn wrap-with-exit-code [res]
   (update-in res [:cmd-info :fn]
              (fn [f]
@@ -781,12 +793,6 @@
                    (if exit-code
                      (System/exit exit-code)
                      result))))))
-
-;; copied from private bb cli fn
-(defn split [a b]
-  (let [[prefix suffix] (split-at (count a) b)]
-    (when (= prefix a)
-      suffix)))
 
 (defn migrate-config-file! []
   (when (fs/exists? ".garden.edn")
@@ -808,16 +814,20 @@
      (catch clojure.lang.ExceptionInfo e#
        (when (try (parse-boolean (System/getenv "DEBUG")) (catch Exception _# false))
          (throw e#))
-       (binding [*out* *err*] (println (ex-message e#)))
-       (System/exit 1))))
+       (binding [*out* *err*]
+         (println (ex-message e#))
+         (System/exit 1)))))
 
 (defn -main [& args]
   (with-exception-reporting
     (migrate-config-file!)
-    (dispatch cmd-tree *command-line-args* {:middleware [wrap-with-help
+    (dispatch cmd-tree *command-line-args* {:middleware [wrap-with-error-reporting
+                                                         wrap-with-help
                                                          wrap-with-quiet
                                                          wrap-with-exit-code
-                                                         wrap-with-output-format]})))
+                                                         wrap-with-output-format]
+                                            :exec-args (read-config)
+                                            :error-fn error-fn})))
 
 (when (= *file* (System/getProperty "babashka.file"))
   (-main))
