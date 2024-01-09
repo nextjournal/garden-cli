@@ -418,12 +418,7 @@
     ret))
 
 (def default-spec
-  {:project {:ref "<project-name>"
-             :require true
-             :message "Command '%s' needs either a --project option or has to be run inside an application.garden project."
-             :desc "The project name"
-             :default-desc "`:project` from `garden.edn`"}
-   :quiet {:coerce :boolean
+  {:quiet {:coerce :boolean
            :alias :q
            :desc "Do not print output"}
    :output-format (let [valid-formats #{:edn :json}]
@@ -431,6 +426,13 @@
                      :coerce :keyword
                      :validate valid-formats
                      :desc (str "Print result in a machine readable format. One of: " (str/join ", " (map name valid-formats)))})})
+
+(def project-spec
+  {:project {:ref "<project-name>"
+             :require true
+             :message "Command '%s' needs either a --project option or has to be run inside an application.garden project."
+             :desc "The project name"
+             :default-desc "`:project` from `garden.edn`"}})
 
 (def secrets-spec
   {:secret-name {:ref "<secret-name>"
@@ -443,18 +445,18 @@
 (def cmd-tree
   {"stop"
    {:fn stop,
-    :spec default-spec,
-    :help "Stop the application in your garden"}
+    :spec (merge default-spec project-spec),
+    :help "Stop the application in your garden"},
    "run"
    {:fn run,
-    :spec default-spec,
+    :spec (merge default-spec project-spec),
     :help "Run the application locally"},
    "deploy"
    {:fn deploy,
     :help "Deploy a project to application.garden",
     :spec
     (->
-     default-spec
+     (merge default-spec project-spec)
      (dissoc :output-format)
      (assoc-in
       [:project :desc]
@@ -465,8 +467,9 @@
        :default "HEAD",
        :desc "The git branch, commit, tag, etc. to be deployed"}
       :force
-      {:desc
-       "Force a deployment, even when the code has not changed since the last deploy"}
+      {:alias "f"
+       :coerce :boolean,
+       :desc "Force a deployment, even when the code has not changed since the last deploy"}
       :deploy-strategy
       {:ref "<mode>",
        :coerce :keyword,
@@ -479,7 +482,7 @@
     :args->opts [:new-project-name],
     :spec
     (->
-     default-spec
+     (merge default-spec project-spec)
      (assoc
       :new-project-name
       {:ref "<new-name>", :require true, :desc "New project name"})
@@ -487,7 +490,7 @@
     :help "Rename a project"},
    "list"
    {:fn list-projects,
-    :spec (dissoc default-spec :project),
+    :spec default-spec,
     :help "List your projects and their status"},
    "tunnel"
    {:args->opts [:port],
@@ -495,23 +498,26 @@
     :help "Open a tunnel to an nREPL server in the application",
     :spec
     (assoc
-     default-spec
+     (merge default-spec project-spec)
      :port
      {:ref "<port>",
       :require false,
       :desc "The local TCP port to tunnel to the remote nREPL port"})},
    "delete"
    {:fn delete,
+    :args->opts [:project]
     :spec
     (assoc
-     default-spec
+     (merge default-spec project-spec)
      :force
-     {:coerce :boolean, :desc "Do not ask for confirmation"}),
+     {:alias "f"
+      :coerce :boolean,
+      :desc "Do not ask for confirmation"}),
     :help
     "Stop the application and remove all project data from your garden (!)"},
    "info"
    {:fn info,
-    :spec default-spec,
+    :spec (merge default-spec project-spec)  ,
     :help "Show information about a project"},
    "log"
    {:fn log, :spec default-spec, :help "Show a project's log on stdout"},
@@ -520,7 +526,7 @@
     :fn publish,
     :spec
     (assoc
-     default-spec
+     (merge default-spec project-spec)
      :domain
      {:ref "<domain>", :require true, :desc "The domain"}),
     :help "Publish your project to a custom domain"},
@@ -528,19 +534,19 @@
    {:fn stop-all, :help "Stop every application in your garden (!)"},
    "restart"
    {:fn restart,
-    :spec default-spec,
+    :spec (merge default-spec project-spec) ,
     :help "Restart a project in your garden"},
    "init"
    {:fn init,
     :spec
     (->
-     default-spec
+     (merge default-spec project-spec)
      (update :project dissoc :require)
      (assoc
       :force
-      {:ref "<boolean>",
-       :desc
-       "Ignore an existing `garden.edn` and re-initialize the project with a new name"})),
+      {:alias "f",
+       :coerce :boolean,
+       :desc "Ignore an existing `garden.edn` and re-initialize the project with a new name"})),
     :help
     "Initialize an application.garden project in the local directory"},
    "version" {:fn #'print-version, :help "Print garden cli version"},
@@ -554,17 +560,18 @@
      :help "Add a secret to a project",
      :spec
      (assoc
-      (merge default-spec secrets-spec)
+      (merge default-spec project-spec secrets-spec)
       :force
-      {:coerce :boolean})},
+      {:coerce :boolean,
+       :description "Overwrite an existing secret"})},
     "remove"
     {:fn remove-secret,
      :args->opts [:secret-name],
      :help "Remove a secret from a project",
-     :spec (merge default-spec secrets-spec)},
+     :spec (merge default-spec project-spec secrets-spec)},
     "list"
     {:fn list-secrets,
-     :spec default-spec,
+     :spec (merge default-spec project-spec) ,
      :help "List all secrets for a project"}},
    "groups"
    {:fn (fn [_] (help {:cmds ["groups"]})),
@@ -615,7 +622,7 @@
      :args->opts [:group-handle],
      :spec
      (->
-      default-spec
+      (merge default-spec project-spec)
       (assoc-in [:project :desc] "The project to be added to the group")
       (assoc
        :group-handle
@@ -628,7 +635,7 @@
      :args->opts [:group-handle],
      :spec
      (->
-      default-spec
+      (merge default-spec project-spec)
       (assoc-in
        [:project :desc]
        "The project to be removed from the group")
@@ -653,7 +660,7 @@
            :require (format "Missing option: %s" (->option (:option m)))
            :validate (format "Invalid value for option %s" (->option (:option m)))
            :coerce (format "Invalid value for option %s" (->option (:option m)))
-           :restricet (format "Invalid option %s" (->option (:option m)))
+           :restrict (format "Invalid option %s" (->option (:option m)))
            nil "Error")))
 
 (defn deep-merge [a b]
@@ -776,11 +783,11 @@
 
 (defn wrap-with-help [{:as res :keys [dispatch]}]
   (update-in res [:cmd-info :fn] (fn [f] (fn [{:as m :keys [opts]}]
-                                         (if (:help opts)
-                                           (do
-                                             (reset! !errors [])
-                                             (help {:args dispatch}))
-                                           (f m))))))
+                                           (if (:help opts)
+                                             (do
+                                               (reset! !errors [])
+                                               (help {:args dispatch}))
+                                             (f m))))))
 
 (defn dev-null-print-writer []
   (java.io.PrintWriter. "/dev/null"))
