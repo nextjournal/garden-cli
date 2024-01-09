@@ -261,10 +261,6 @@
   (let [{:keys [ok message]} (call-api (merge {:command "stop"} (:opts m)))]
     (when-not ok (println message))))
 
-(defn stop-all [_]
-  (let [{:keys [ok message]} (call-api {:command "stop-all"})]
-    (when-not ok (println message))))
-
 (def domain-setup-message
   {:missing-a-record (fn [{:keys [ip]}]
                        (str "Please add an A-record with '" ip "' to your domain and try again. It might take some time for DNS changes to take effect."))
@@ -531,8 +527,6 @@
      :domain
      {:ref "<domain>", :require true, :desc "The domain"}),
     :help "Publish your project to a custom domain"},
-   "stop-all"
-   {:fn stop-all, :help "Stop every application in your garden (!)"},
    "restart"
    {:fn restart,
     :spec (merge default-spec project-spec) ,
