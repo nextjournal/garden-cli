@@ -84,7 +84,8 @@
   (fs/delete-if-exists "garden.edn"))
 
 (defn template [target-dir]
-  (fs/copy-tree (fs/path (io/resource "project-template")) target-dir {:replace-existing true}))
+  (fs/copy-tree (fs/path (io/resource "project-template")) target-dir {:replace-existing true
+                                                                       :posix-file-permissions "rwxr-xr-x"}))
 
 (defn project-dir []
   (fs/cwd))
