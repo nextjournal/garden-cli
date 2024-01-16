@@ -414,6 +414,17 @@
     (println message)
     ret))
 
+(defn delete-group [{:keys [opts]}]
+  (let [{:keys [force group-handle]} opts
+        continue? (or force
+                      (do (println (format "Are you sure you want to delete the group %s?" group-handle))
+                          (println "To delete, please type the group-handle and press 'Enter':")
+                          (= group-handle (read-line))))]
+    (when continue?
+      (let [{:as ret :keys [ok message]} (call-api (assoc opts :command "delete-group"))]
+        (println message)
+        ret))))
+
 (def default-spec
   {:quiet {:coerce :boolean
            :alias :q
@@ -638,7 +649,21 @@
        :group-handle
        {:ref "<handle>",
         :require true,
-        :desc "The group to remove a project from"}))}},
+        :desc "The group to remove a project from"}))}
+    "delete"
+    {:fn delete-group,
+     :help "Delete a group"
+     :args->opts [:group-handle],
+     :spec (assoc
+            default-spec
+            :group-handle
+            {:ref "<handle>",
+             :require true,
+             :desc "The group to delete"}
+            :force
+            {:alias "f"
+             :coerce :boolean,
+             :desc "Do not ask for confirmation"})}},
    "sftp"
    {:fn sftp,
     :help "Spawn a SFTP session to your project's persistent storage"}})
