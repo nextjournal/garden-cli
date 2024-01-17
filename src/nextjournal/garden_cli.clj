@@ -211,7 +211,7 @@
             (println message))
         (print-error message)))))
 
-(def cols '[name status git-rev domains deployed-at deployed-by owner groups])
+(def cols '[name status git-rev url deployed-at deployed-by owner groups])
 (def col-sep 2)
 (def max-cell-lenght (apply max (map (comp count name) cols)))
 (defn pad [entry max-length] (apply str (repeat (+ col-sep (- max-length (count (name entry)))) " ")))
@@ -230,19 +230,11 @@
         info-map)
       (println message))))
 
-(defn format-domains-oneline [domains]
-  (when domains
-    (let [c (count domains)
-          domain (first domains)]
-      (str domain (when (> c 1) (format " (%s more)" (dec c)))))))
-
 (defn list-projects [_]
   (let [{:keys [ok message projects]} (call-api {:command "list"})]
     (if ok
       (do (pp/print-table (remove #{'owner 'groups} cols)
-                          (->> projects
-                               (map (fn [p] (update p :domains format-domains-oneline)))
-                               (map #(update-keys % (comp symbol name)))))
+                          (map #(update-keys % (comp symbol name)) projects))
           projects)
       (println message))))
 
