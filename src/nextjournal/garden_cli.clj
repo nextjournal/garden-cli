@@ -54,8 +54,7 @@
   ([command body]
    (let [[host port] (clojure.string/split arboretum-ssh-host #":")]
      (concat (when port ["-p" port])
-             ;FIXME actually check host key
-             (cond-> ["-n" "-o" "StrictHostKeyChecking=no" "-o" "ControlMaster=no" "-o" "ControlPath=none" host]
+             (cond-> ["-n" "-o" "StrictHostKeyChecking=accept-new" "-o" "ControlMaster=no" "-o" "ControlPath=none" host]
                command (conj command)
                body (conj (pr-str body)))))))
 
@@ -67,8 +66,6 @@
 
 (defn update-config! [f & args] (spit "garden.edn" (str (pr-str (apply f (read-config) args)) "\n")))
 #_(update-config! assoc :v "1.2.1")
-
-(defn project-name [] (:project (read-config)))
 
 (defn call-api [{:as body :keys [as]}]
   (cond-> (apply shell {:out (if (= :stream as) :inherit :string)} "ssh" (ssh-args "api" (assoc body :version version)))
@@ -110,15 +107,16 @@
 (defn init [{:keys [opts]}]
   (let [target-dir (str (fs/cwd))]
     (when-not (git-repo? target-dir)
-      (println "Initializing git repo")
+      (println "Initializing git repo.")
       (sh ["git" "init"] {:dir target-dir}))
     (let [project-name (or (-> opts :project)
-                           (when-not (:force opts) (project-name)))]
+                           (when-not (:force opts) (:project (read-config))))]
       (when (:force opts) (reset))
       (when (empty? (filter #(not= ".git" %) (map fs/file-name (fs/list-dir (project-dir)))))
         (template target-dir))
       (if (garden-project?)
-        (print-error "It seems you have already initialized a Garden project in this repository. Use --force to overwrite.")
+        (print-error (format "There is already an existing application.garden project (%s) in this repository. Use --force to overwrite."
+                             (:project (read-config))))
 
         ;; we might have cloned a repo tracking `garden.edn`: we validate the project name against the server anyway
         (let [{:keys [ok message id project]} (call-api (cond-> {:command "create"}
@@ -129,8 +127,8 @@
               (when-not (-> opts :project)
                 (println "You can rename your project at any time via `garden rename <your-name>`."))
               (if (empty-git-repo? target-dir)
-                (println (str "Create your first commit, then run `garden deploy`."))
-                (println (str "Now you can run `garden deploy`.")))
+                (println (str "First create a commit, then run `garden deploy` to deploy your project."))
+                (println (str " Run `garden deploy` to deploy your project.")))
               (setup-git-remote! (git-remote-url id))
               (update-config! assoc :project project))
 
@@ -168,7 +166,7 @@
         {:keys [out exit]} (sh "git rev-parse" git-ref)]
     (if (pos? exit)
       (print-error (if (= git-ref "HEAD")
-                 "You need commit before you can deploy."
+                 "You need to commit before you can deploy."
                  (format "`%s` is not a valid git ref." git-ref)))
       (let [sha (str/trim out)
             branch (-> (sh "git symbolic-ref --short HEAD") :out str/trim)
@@ -176,7 +174,7 @@
             remote-url (-> (sh "git" "remote" "get-url" remote) :out str/trim)
             {:keys [ok project message id git-rev]} (call-api (assoc opts :command "create"))]
         (if ok
-          (let [_ (when (= :new ok) (println (str "A new project '" project "' has been created.")))
+          (let [_ (when (= :new ok) (println (str "Created project '" project "'.")))
                 _ (println "Pushing code to garden...")
                 {:keys [out err exit]} (sh "git push --force" (git-remote-url id) (str git-ref ":___garden_deploy___"))]
             (if-not (zero? exit)
@@ -198,7 +196,7 @@
           (print-error message))))))
 
 (defn sftp [_ctx]
-  (let [{:keys [id]} (call-api {:command "info" :project (project-name)})
+  (let [{:keys [id]} (call-api {:command "info"})
         [host port] (clojure.string/split arboretum-ssh-host #":")]
     (shell (concat ["sftp" (str "-o SetEnv SFTP_PROJECT=" id)]
                    (when port ["-P" port])
@@ -206,15 +204,12 @@
 
 (defn rename [{:keys [opts]}]
   (if-not (garden-project?)
-    (println "`rename` might only be called from inside a garden project. Run `garden init` to get started.")
-    (if-some [new-project-name (:new-project-name opts)]
-      (let [{:keys [ok message project]} (call-api (merge {:command "rename" :project (project-name)} opts))]
-        (if ok
-          (do (update-config! assoc :project project)
-              (println "Project renamed successfully.")
-              (println (str "Once deployed, your application will be available at: 'https://" new-project-name "." "live.clerk.garden'.")))
-          (print-error message)))
-      (print-error "You need to pass a `new-project-name` argument."))))
+    (println "`rename` may only be called from inside a garden project.")
+    (let [{:keys [ok message project]} (call-api (merge {:command "rename"} opts))]
+      (if ok
+        (do (update-config! assoc :project project)
+            (println message))
+        (print-error message)))))
 
 (def cols '[name status git-rev domains deployed-at deployed-by owner groups])
 (def col-sep 2)
@@ -261,53 +256,37 @@
   (let [{:keys [ok message]} (call-api (merge {:command "stop"} (:opts m)))]
     (when-not ok (println message))))
 
-(def domain-setup-message
-  {:missing-a-record (fn [{:keys [ip]}]
-                       (str "Please add an A-record with '" ip "' to your domain and try again. It might take some time for DNS changes to take effect."))
-   :missing-txt-record (fn [{:keys [txt-record]}]
-                         (str "Please add a TXT-record with '" txt-record "' to your domain and try again. It might take some time for DNS changes to take effect."))
-   :missing-deployment (fn [_]
-                         "You need to run `garden deploy` first.")})
-
 (defn publish [{:as m :keys [opts]}]
-  (let [{:keys [project domain] :or {project (project-name)}} opts]
-    (if-not domain
-      (do (println "Missing domain")
-          (println)
-          (help m))
-      (let [{:as ret :keys [ok ip txt-record reason]} (call-api {:command "get-domain-verification-info"
-                                                                 :project project
-                                                                 :domain domain})]
-        (if ok
-          (do
-            (println (str "Please configure DNS for '" domain "' with the following A record:"))
-            (println ip)
-            (println "and the following TXT record:")
-            (println txt-record)
-            (println "After you have added the records, press enter.")
-            (read-line)
-            (println "Checking configuration...")
-            (Thread/sleep 1000)          ;wait a bit more for DNS changes
-            (let [{:as ret :keys [ok reason message]} (call-api {:command "publish"
-                                                                 :project project
-                                                                 :domain domain})]
-              (cond
-                (and (not ok) reason)
-                (println ((domain-setup-message reason) ret))
-                (not ok)
-                (println message)
-                ok
-                (do
-                  (restart m)
-                  (println (str "Done. Your project is available at https://" domain))))))
-          (println ((domain-setup-message reason) ret)))))))
+  (let [{:keys [project domain]} opts
+        {:as ret :keys [ok message ip txt-record]} (call-api {:command "get-domain-verification-info"
+                                                      :project project
+                                                      :domain domain})]
+    (if ok
+      (do
+        (println (str "Please configure DNS for '" domain "' with the following A record:"))
+        (println ip)
+        (println "and the following TXT record:")
+        (println txt-record)
+        (println "After you have added the records, press enter.")
+        (read-line)
+        (println "Checking configuration...")
+        (Thread/sleep 1000)          ;wait a bit more for DNS changes
+        (let [{:keys [ok message]} (call-api {:command "publish"
+                                              :project project
+                                              :domain domain})]
+          (if ok
+            (do
+              (restart m)
+              (println (str "Done. Your project is available at https://" domain)))
+            (print-error message))))
+      (print-error message))))
 
 (defn delete [{:keys [opts]}]
   (let [{:keys [ok message name]} (call-api (assoc opts :command "info"))
         guard (fn [project-name]
                 (println (str "Deleting a project will stop your current application and remove your data permanently. This cannot be undone!\n"
-                              "If you do, your project's name will be available to anyone else again.\n"
-                              "Please confirm by typing the project's name and pressing 'Enter':"))
+                              "If you delete a project, its name will be available to anyone else again.\n"
+                              (format "If you want to delete project %s, confirm by typing the project's name and pressing 'Enter':" project-name)))
                 (= project-name (read-line)))]
     (if-not ok
       (println message)
@@ -316,9 +295,9 @@
         (if (or (:force opts) (guard name))
           (let [{:keys [ok message]} (call-api (assoc opts :command "delete"))]
             (if ok
-              (println "Your project has been deleted.")
-              (println message)))
-          (print-error "That's not the project name."))))))
+              (println message)
+              (print-error message)))
+          (print-error "This is not the project-name. Not deleting your project."))))))
 
 (defn free-port
   "Finds an free, unprivileged port.
@@ -332,11 +311,11 @@
     p))
 
 (defn tunnel [{:keys [opts]}]
-  (let [{:keys [repl-port]} (call-api (merge {:command "info" :project (project-name)} opts))
+  (let [{:keys [repl-port]} (call-api (merge {:command "info"} opts))
         {:keys [port]} opts]
     (let [port (or port (free-port))
           old-port (try (slurp ".nrepl-port") (catch java.io.FileNotFoundException e nil))]
-      (println (str "Forwarding port " port " to remote nrepl, use ^-C to quit."))
+      (println (str "Forwarding port " port " to remote nREPL. Use ^-C to quit."))
       (spit ".nrepl-port" port)
       (try
         (apply shell
@@ -365,54 +344,58 @@
                                                 (String. (.readPassword c)))
                                             (read-line)))))]
       (if ok
-        (println "Secret added successfully. Note that users with access to this project will be able to use/see your secrets.")
-        (println message)))))
+        (println message)
+        (print-error message)))))
 
 (defn remove-secret [{:keys [opts]}]
   (let [{:keys [ok message]} (call-api (assoc opts :command "remove-secret"))]
     (if ok
-      (println "Secret removed successfully")
-      (println message))))
+      (println message)
+      (print-error message))))
 
 (defn list-secrets [{:keys [opts]}]
   (let [{:keys [ok secrets message]} (call-api (assoc opts :command "list-secrets"))]
     (if ok
       (do (doseq [s secrets] (println s)) secrets)
-      (println message))))
+      (print-error message))))
 
 ;; ## Groups
 
 (defn create-group [{:keys [opts]}]
   (let [{:as ret :keys [ok message]} (call-api (assoc opts :command "create-group"))]
-    (println message)
-    ret))
+    (if ok
+      (do (println message) ret)
+      (print-error message))))
 
 (defn list-groups [{:keys [opts]}]
   (let [{:as ret :keys [ok message groups]} (call-api (assoc opts :command "list-groups"))]
-    (if-not ok
-      (println message)
-      (doseq [g groups] (println g)))
-    ret))
+    (if ok
+      (do (doseq [g groups] (println g)) ret)
+      (print-error message))))
 
 (defn add-group-member [{:keys [opts]}]
   (let [{:as ret :keys [ok message]} (call-api (assoc opts :command "add-group-member"))]
-    (println message)
-    ret))
+    (if ok
+      (do (println message) ret)
+      (print-error message))))
 
 (defn remove-group-member [{:keys [opts]}]
   (let [{:as ret :keys [ok message]} (call-api (assoc opts :command "remove-group-member"))]
-    (println message)
-    ret))
+    (if ok
+      (do (println message) ret)
+      (print-error message))))
 
 (defn add-project-to-group [{:keys [opts]}]
   (let [{:as ret :keys [ok message]} (call-api (assoc opts :command "add-project-to-group"))]
-    (println message)
-    ret))
+    (if ok
+      (do (println message) ret)
+      (print-error message))))
 
 (defn remove-project-from-group [{:keys [opts]}]
   (let [{:as ret :keys [ok message]} (call-api (assoc opts :command "remove-project-from-group"))]
-    (println message)
-    ret))
+    (if ok
+      (do (println message) ret)
+      (print-error message))))
 
 (defn delete-group [{:keys [opts]}]
   (let [{:keys [force group-handle]} opts
@@ -427,7 +410,7 @@
 
 (def default-spec
   {:quiet {:coerce :boolean
-           :alias :q
+           :alias "q"
            :desc "Do not print output"}
    :output-format (let [valid-formats #{:edn :json}]
                     {:ref "<output-format>"
@@ -475,7 +458,7 @@
        :default "HEAD",
        :desc "The git branch, commit, tag, etc. to be deployed"}
       :force
-      {:alias "f"
+      {:alias :f
        :coerce :boolean,
        :desc "Force a deployment, even when the code has not changed since the last deploy"}
       :deploy-strategy
@@ -518,7 +501,7 @@
     (assoc
      (merge default-spec project-spec)
      :force
-     {:alias "f"
+     {:alias :f
       :coerce :boolean,
       :desc "Do not ask for confirmation"}),
     :help
@@ -550,7 +533,7 @@
      (update :project dissoc :require)
      (assoc
       :force
-      {:alias "f",
+      {:alias :f,
        :coerce :boolean,
        :desc "Ignore an existing `garden.edn` and re-initialize the project with a new name"})),
     :help
@@ -661,7 +644,7 @@
              :require true,
              :desc "The group to delete"}
             :force
-            {:alias "f"
+            {:alias :f,
              :coerce :boolean,
              :desc "Do not ask for confirmation"})}},
    "sftp"
