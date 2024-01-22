@@ -5,7 +5,7 @@
   (:refer-clojure :exclude [pr-str])
   (:require [babashka.cli :as cli]
             [babashka.fs :as fs]
-            [babashka.process :refer [shell sh]]
+            [babashka.process :as p :refer [shell sh]]
             [babashka.http-client :as http]
             [clojure.core :as core]
             [clojure.string :as str]
@@ -13,6 +13,7 @@
             [clojure.pprint :as pp]
             [cheshire.core :as json]
             [clojure.java.io :as io]
+            [babashka.nrepl-client :as nrepl]
             [nextjournal.edit-distance :as edit-distance]))
 
 (def version (let [semver (try (str/trim (slurp (io/resource "VERSION")))
@@ -134,32 +135,55 @@
 
             (print-error message)))))))
 
-(defn run [_]
+(defn wait-for
+  ([f] (wait-for f 10))
+  ([f timeout-seconds]
+   (loop [time-left timeout-seconds]
+     (let [sleep-seconds 1]
+       (Thread/sleep (* sleep-seconds 1000))
+       (if (f)
+         {:success true}
+         (if (>= time-left 0)
+           (recur (- time-left sleep-seconds))
+           {:error :timeout}))))))
+
+(defn run [{:keys [opts]}]
   (println "Starting application locally...")
   (let [http-port 7777
         url (str "http://localhost:" http-port)
-        repl-port 6666
+        nrepl-port 6666
         storage-dir ".garden/storage"
-        timeout-seconds 10]
-    (doto (Thread. (fn [] (loop [time-left timeout-seconds]
-                            (let [sleep-seconds 1]
-                              (Thread/sleep (* sleep-seconds 1000))
-                              (if (try (<= 200
-                                           (:status (http/head url {:client (http/client {:follow-redirects :never})}))
-                                           399)
-                                       (catch Throwable _ false))
-                                (println "Application ready on" url)
-                                (if (>= time-left 0)
-                                  (recur (- time-left sleep-seconds))
-                                  (do
-                                    (println (format "Application did not start after %s." timeout-seconds))
-                                    (System/exit 1))))))))
+        timeout-seconds 10
+        garden-alias (edn/read-string (slurp "deps.edn"))
+        sdeps {:deps {'io.github.nextjournal/garden-nrepl {:git/sha "bd39a93d38cd67df0960a087668187f94b804eb5"}}
+               :aliases {:nextjournal/garden-nrepl {:exec-fn 'nextjournal.garden-nrepl/start!}}}
+        skip-inject-nrepl (:skip-inject-nrepl opts)
+        start-command (filterv some?
+                               ["clojure"
+                                "-Sdeps" (pr-str sdeps)
+                                "-J-Dclojure.main.report=stdout"
+                                (when-some [extra-aliases (get garden-alias :nextjournal.garden/aliases)]
+                                  (when-not (every? keyword? extra-aliases) (throw (ex-info "`:nextjournal.garden/aliases` must be a vector of keywords" opts)))
+                                  (str "-A" (str/join extra-aliases)))
+                                (if (not skip-inject-nrepl)
+                                  "-X:nextjournal/garden:nextjournal/garden-nrepl"
+                                  "-X:nextjournal/garden")
+                                ":host" "\"0.0.0.0\"" ":port" "7777"])]
+    (doto (Thread. (fn [] (if (:success (wait-for #(try (<= 200
+                                                            (:status (http/head url {:client (http/client {:follow-redirects :never})}))
+                                                            399)
+                                                        (catch Throwable _ false))))
+                            (println "Application ready on" url)
+                            (do
+                              (print-error (format "Application did not start after %s." timeout-seconds))
+                              (System/exit 1)))))
       .start)
     (fs/create-dirs storage-dir)
-    (sh ["clojure" "-X:nextjournal/garden"] {:extra-env {"GARDEN_STORAGE" storage-dir
-                                                         "GARDEN_EMAIL_ADDRESS" "just-a-placeholder@example.com"}
-                                             :out :inherit
-                                             :err :inherit})))
+    (sh start-command {:extra-env {"GARDEN_NREPL_PORT" nrepl-port
+                                   "GARDEN_STORAGE" storage-dir
+                                   "GARDEN_EMAIL_ADDRESS" "just-a-placeholder@example.com"}
+                       :out :inherit
+                       :err :inherit})))
 
 (defn deploy [{:keys [opts]}]
   (let [{:keys [git-ref force]} opts
@@ -302,23 +326,46 @@
     (.close s)
     p))
 
-(defn tunnel [{:keys [opts]}]
+(defn repl-up? [port]
+  (try (= {:vals ["1"]}
+          (nrepl/eval-expr {:host "127.0.0.1"
+                            :port port
+                            :expr "1"}))
+       (catch Exception _
+         false)))
+
+(defn connect-repl [port]
+  (shell "clojure" "-Sdeps" "{:deps {reply/reply {:mvn/version \"0.5.1\"}}}" "-M" "-m" "reply.main" "--attach" port))
+
+(defn repl [{:keys [opts]}]
   (let [{:keys [repl-port]} (call-api (merge {:command "info"} opts))
-        {:keys [port]} opts]
+        {:keys [port eval headless]} opts]
     (let [port (or port (free-port))
-          old-port (try (slurp ".nrepl-port") (catch java.io.FileNotFoundException e nil))]
-      (println (str "Forwarding port " port " to remote nREPL. Use ^-C to quit."))
-      (spit ".nrepl-port" port)
+          old-port (try (slurp ".nrepl-port") (catch java.io.FileNotFoundException e nil))
+          tunnel (atom nil)]
       (try
-        (apply shell
-               (concat ["ssh" "-N" "-L" (str port ":localhost:" repl-port)]
-                       (ssh-args)
-                       "tunnel"))
+        (reset! tunnel (p/process (concat ["ssh" "-N" "-L" (str port ":localhost:" repl-port)]
+                                          (ssh-args)
+                                          ["tunnel"])))
+        (if (= :timeout (:error (wait-for (partial repl-up? port))))
+          (print-error (str/join "\n" ["It seems there is no nREPL server listening in your application."
+                                       "Check https://docs.apps.garden#nrepl-support for information."]))
+          (if eval
+            (prn (first (:vals (nrepl/eval-expr {:host "127.0.0.1"
+                                                 :port port
+                                                 :expr eval}))))
+            (do (println (str "Forwarded port " port " to remote nREPL. Use ^-C to quit."))
+                (spit ".nrepl-port" port)
+                (if headless
+                  @(promise)
+                  (connect-repl port)))))
         (catch Throwable _
           (if old-port
             (spit ".nrepl-port" old-port)
             (fs/delete-if-exists ".nrepl-port"))
+          (p/destroy @tunnel)
           (println "Tunnel closed"))))))
+
 
 (defn add-secret [{:keys [opts]}]
   (if (and (not (:force opts))
@@ -475,13 +522,21 @@
    {:fn list-projects,
     :spec default-spec,
     :help "List your projects and their status"},
-   "tunnel"
-   {:args->opts [:port],
-    :fn tunnel,
-    :help "Open a tunnel to an nREPL server in the application",
+   "repl"
+   {:fn repl ,
+    :help "Open a REPL connected to the deployed application",
     :spec
     (assoc
      (merge default-spec project-spec)
+     :headless
+     {:coerce :boolean
+      :require false,
+      :desc "Do not start an interactive REPL session. Only tunnel nREPL connection."}
+     :eval
+     {:alias :e
+      :ref "<string>",
+      :require false,
+      :desc "An expression to evaluate in the context of the remote app"}
      :port
      {:ref "<port>",
       :require false,
