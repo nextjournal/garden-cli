@@ -120,8 +120,8 @@
                              (:project (read-config))))
 
         ;; we might have cloned a repo tracking `garden.edn`: we validate the project name against the server anyway
-        (let [{:keys [ok message id project]} (call-api (cond-> {:command "create"}
-                                                          project-name (assoc :project project-name)))]
+        (let [{:keys [ok message id name]} (call-api (cond-> {:command "create"}
+                                                       project-name (assoc :project project-name)))]
           (if ok
             (do
               (println message)
@@ -131,7 +131,7 @@
                 (println (str "First create a commit, then run `garden deploy` to deploy your project."))
                 (println (str " Run `garden deploy` to deploy your project.")))
               (setup-git-remote! (git-remote-url id))
-              (update-config! assoc :project project))
+              (update-config! assoc :project name))
 
             (print-error message)))))))
 
@@ -190,15 +190,15 @@
         {:keys [out exit]} (sh "git rev-parse" git-ref)]
     (if (pos? exit)
       (print-error (if (= git-ref "HEAD")
-                 "You need to commit before you can deploy."
-                 (format "`%s` is not a valid git ref." git-ref)))
+                     "You need to commit before you can deploy."
+                     (format "`%s` is not a valid git ref." git-ref)))
       (let [sha (str/trim out)
             branch (-> (sh "git symbolic-ref --short HEAD") :out str/trim)
             remote (-> (sh "git" "config" (str "branch." branch ".remote")) :out str/trim)
             remote-url (-> (sh "git" "remote" "get-url" remote) :out str/trim)
-            {:keys [ok project message id git-rev]} (call-api (assoc opts :command "create"))]
+            {:keys [ok name status message id git-rev]} (call-api (assoc opts :command "create"))]
         (if ok
-          (let [_ (when (= :new ok) (println (str "Created project '" project "'.")))
+          (let [_ (when (= :new ok) (println (str "Created project '" name "'.")))
                 _ (println "Pushing code to garden...")
                 {:keys [out err exit]} (sh "git push --force" (git-remote-url id) (str git-ref ":___garden_deploy___"))]
             (if-not (zero? exit)
@@ -207,8 +207,12 @@
               (let [working-dir (path-from-git-root-parent)]
                 (when-not working-dir
                   (sh "git update-ref refs/remotes/garden/main" sha))
-                (if (and (= sha git-rev) (not force))
-                  (println "Project is up-to-date. Use `--force` to deploy the same version again.")
+                (when (= sha git-rev)
+                  (println "Project code is up-to-date..."))
+                (if (and (not force)
+                         (= sha git-rev)
+                         (= "running" status))
+                  (println "Project is Running. Use `--force` to deploy the same version again.")
                   (call-api (-> opts
                                 (assoc :command "deploy" :commit sha :as :stream)
                                 (cond->
@@ -255,7 +259,7 @@
       (println message))))
 
 (defn list-projects [_]
-  (let [{:keys [ok message projects]} (call-api {:command "list"})]
+  (let [{:keys [ok message projects]} (call-api {:command "list-projects"})]
     (if ok
       (do (pp/print-table (remove #{'owner 'groups} cols)
                           (map #(update-keys % (comp symbol name)) projects))
