@@ -266,8 +266,8 @@
           projects)
       (println message))))
 
-(defn log [{:keys [opts]}]
-  (call-api (assoc opts :command "log" :as :stream)))
+(defn logs [{:keys [opts]}]
+  (call-api (assoc opts :command "logs" :as :stream)))
 
 (defn restart [{:keys [opts]}]
   (call-api (assoc opts :command "restart" :as :stream)))
@@ -561,8 +561,8 @@
    {:fn info,
     :spec (merge default-spec project-spec)  ,
     :help "Show information about a project"},
-   "log"
-   {:fn log, :spec default-spec, :help "Show a project's log on stdout"},
+   "logs"
+   {:fn logs, :spec default-spec, :help "Show a project's log on stdout"},
    "publish"
    {:args->opts [:domain],
     :fn publish,
