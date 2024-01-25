@@ -453,7 +453,7 @@
 
 (def default-spec
   {:quiet {:coerce :boolean
-           :alias "q"
+           :alias :q
            :desc "Do not print output"}
    :output-format (let [valid-formats #{:edn :json}]
                     {:ref "<output-format>"
