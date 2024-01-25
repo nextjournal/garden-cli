@@ -82,8 +82,11 @@
   (fs/delete-if-exists "garden.edn"))
 
 (defn template [target-dir]
-  (fs/copy-tree (fs/path (io/resource "project-template")) target-dir {:replace-existing true
-                                                                       :posix-file-permissions "rwxr-xr-x"}))
+  (let [perms "rwxr-xr-x"]
+    (fs/copy-tree (fs/path (io/resource "project-template")) target-dir {:replace-existing true
+                                                                         :posix-file-permissions perms})
+    (fs/walk-file-tree target-dir {:pre-visit-dir (fn [dir _] (fs/set-posix-file-permissions dir perms) :continue)
+                                   :visit-file (fn [file _] (fs/set-posix-file-permissions file perms) :continue)})))
 
 (defn project-dir []
   (fs/cwd))
