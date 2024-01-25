@@ -6,5 +6,5 @@
 }:
 writeShellScriptBin "garden"
 ''
-  exec ${babashka}/bin/bb --config ${../bb.edn} --deps-root ${../.} -Dnextjournal.garden.rev=${rev} -m nextjournal.garden-cli -- $@
+  exec ${babashka}/bin/bb -Sforce --config ${../bb.edn} --deps-root ${../.} -Dnextjournal.garden.rev=${rev} -m nextjournal.garden-cli -- $@
 ''

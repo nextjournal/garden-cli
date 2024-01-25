@@ -29,7 +29,7 @@
       system: {
         garden = {
           type = "app";
-          program = "${self.packages.system.garden}/bin/garden";
+          program = "${self.packages.${system}.garden}/bin/garden";
         };
       }
     );
