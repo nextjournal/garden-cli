@@ -155,7 +155,7 @@
   (let [http-port 7777
         url (str "http://localhost:" http-port)
         nrepl-port 6666
-        storage-dir ".garden/storage"
+        storage-dir (fs/absolutize ".garden/storage")
         timeout-seconds 10
         garden-alias (edn/read-string (slurp "deps.edn"))
         sdeps {:deps {'io.github.nextjournal/garden-nrepl {:git/sha "911ca60148f893e2791287741f9fd97b852ea702"}}
