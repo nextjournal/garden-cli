@@ -158,7 +158,7 @@
         storage-dir ".garden/storage"
         timeout-seconds 10
         garden-alias (edn/read-string (slurp "deps.edn"))
-        sdeps {:deps {'io.github.nextjournal/garden-nrepl {:git/sha "bd39a93d38cd67df0960a087668187f94b804eb5"}}
+        sdeps {:deps {'io.github.nextjournal/garden-nrepl {:git/sha "911ca60148f893e2791287741f9fd97b852ea702"}}
                :aliases {:nextjournal/garden-nrepl {:exec-fn 'nextjournal.garden-nrepl/start!}}}
         skip-inject-nrepl (:skip-inject-nrepl opts)
         start-command (filterv some?
