@@ -226,8 +226,8 @@
                                   (assoc :remote-url remote-url))))))))
           (print-error message))))))
 
-(defn sftp [_ctx]
-  (let [{:keys [id]} (call-api {:command "info"})
+(defn sftp [{:keys [opts]}]
+  (let [{:keys [id]} (call-api (merge {:command "info"} opts))
         [host port] (clojure.string/split arboretum-ssh-host #":")]
     (shell (concat ["sftp" (str "-o SetEnv SFTP_PROJECT=" id)]
                    (when port ["-P" port])
@@ -244,7 +244,7 @@
 
 (def cols '[name status git-rev url deployed-at deployed-by owner groups])
 (def col-sep 2)
-(def max-cell-lenght (apply max (map (comp count name) cols)))
+(def max-cell-length (apply max (map (comp count name) cols)))
 (defn pad [entry max-length] (apply str (repeat (+ col-sep (- max-length (count (name entry)))) " ")))
 
 ;TODO disentangle formatting
@@ -254,10 +254,10 @@
       (let [info-map (select-keys m (map keyword cols))]
         (doseq [[k v] info-map]
           (if (coll? v)
-            (do (println (str (name k) ":" (pad k max-cell-lenght) (first v)))
+            (do (println (str (name k) ":" (pad k max-cell-length) (first v)))
                 (doseq [v (rest v)]
-                  (println (str (pad "" max-cell-lenght) " " v))))
-            (when v (println (str (name k) ":" (pad k max-cell-lenght) v)))))
+                  (println (str (pad "" max-cell-length) " " v))))
+            (when v (println (str (name k) ":" (pad k max-cell-length) v)))))
         info-map)
       (println message))))
 
@@ -703,6 +703,7 @@
              :desc "Do not ask for confirmation"})}},
    "sftp"
    {:fn sftp,
+    :spec (merge default-spec project-spec),
     :help "Spawn a SFTP session to your project's persistent storage"}})
 
 (defn keyword-map [m]
