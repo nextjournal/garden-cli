@@ -385,9 +385,8 @@
                            :secret-value (do
                                            (println "Type your secret and press Enter:")
                                            (or
-                                            ;;FIXME reenable when https://github.com/oracle/graal/issues/7567 is fixed
-                                            #_(when-some [c (System/console)]
-                                                (String. (.readPassword c)))
+                                            (when-some [c (System/console)]
+                                              (String. (.readPassword c)))
                                             (read-line)))))]
       (if ok
         (println message)
