@@ -166,27 +166,41 @@
                                 "-Sdeps" (pr-str sdeps)
                                 "-J-Dclojure.main.report=stdout"
                                 (when-some [extra-aliases (get garden-alias :nextjournal.garden/aliases)]
-                                  (when-not (every? keyword? extra-aliases) (throw (ex-info "`:nextjournal.garden/aliases` must be a vector of keywords" opts)))
+                                  (when-not (every? keyword? extra-aliases)
+                                    (throw (ex-info "`:nextjournal.garden/aliases` must be a vector of keywords" opts)))
                                   (str "-A" (str/join extra-aliases)))
                                 (if (not skip-inject-nrepl)
                                   "-X:nextjournal/garden:nextjournal/garden-nrepl"
                                   "-X:nextjournal/garden")
-                                ":host" "\"0.0.0.0\"" ":port" "7777"])]
+                                ":host" "\"0.0.0.0\"" ":port" "7777"])
+        app-process (promise)
+        old-port (try (slurp ".nrepl-port") (catch java.io.FileNotFoundException _ nil))]
+    (-> (Runtime/getRuntime)
+        (.addShutdownHook (Thread. (fn []
+                                     (p/destroy-tree @app-process)
+                                     (if old-port
+                                       (spit ".nrepl-port" old-port)
+                                       (fs/delete-if-exists ".nrepl-port"))))))
     (doto (Thread. (fn [] (if (:success (wait-for #(try (<= 200
                                                             (:status (http/head url {:client (http/client {:follow-redirects :never})}))
                                                             399)
                                                         (catch Throwable _ false))))
                             (println "Application ready on" url)
                             (do
-                              (print-error (format "Application did not start after %s." timeout-seconds))
+                              (print-error (format "Application did not start after %ss." timeout-seconds))
                               (System/exit 1)))))
       .start)
     (fs/create-dirs storage-dir)
-    (sh start-command {:extra-env {"GARDEN_NREPL_PORT" nrepl-port
-                                   "GARDEN_STORAGE" storage-dir
-                                   "GARDEN_EMAIL_ADDRESS" "just-a-placeholder@example.com"}
-                       :out :inherit
-                       :err :inherit})))
+    (spit ".nrepl-port" nrepl-port)
+    (let [p (p/process start-command
+                       {:extra-env {"GARDEN_NREPL_PORT" nrepl-port
+                                    "GARDEN_STORAGE" storage-dir
+                                    "GARDEN_EMAIL_ADDRESS" "just-a-placeholder@example.com"
+                                    "GARDEN_URL" url}
+                        :out :inherit
+                        :err :inherit})]
+      (deliver app-process p)
+      (p/check p))))
 
 (defn deploy [{:keys [opts]}]
   (let [{:keys [git-ref force]} opts
@@ -346,32 +360,32 @@
 
 (defn repl [{:keys [opts]}]
   (let [{:keys [repl-port]} (call-api (merge {:command "info"} opts))
-        {:keys [port eval headless]} opts]
-    (let [port (or port (free-port))
-          old-port (try (slurp ".nrepl-port") (catch java.io.FileNotFoundException e nil))
-          tunnel (atom nil)]
-      (try
-        (reset! tunnel (p/process (concat ["ssh" "-N" "-L" (str port ":localhost:" repl-port)]
-                                          (ssh-args)
-                                          ["tunnel"])))
-        (if (= :timeout (:error (wait-for (partial repl-up? port))))
-          (print-error (str/join "\n" ["It seems there is no nREPL server listening in your application."
-                                       "Check https://docs.apps.garden#nrepl-support for information."]))
-          (if eval
-            (prn (first (:vals (nrepl/eval-expr {:host "127.0.0.1"
-                                                 :port port
-                                                 :expr eval}))))
-            (do (println (str "Forwarded port " port " to remote nREPL. Use ^-C to quit."))
-                (spit ".nrepl-port" port)
-                (if headless
-                  @(promise)
-                  (connect-repl port)))))
-        (catch Throwable _
-          (if old-port
-            (spit ".nrepl-port" old-port)
-            (fs/delete-if-exists ".nrepl-port"))
-          (p/destroy @tunnel)
-          (println "Tunnel closed"))))))
+        {:keys [port eval headless]} opts
+        port (or port (free-port))
+        old-port (try (slurp ".nrepl-port") (catch java.io.FileNotFoundException e nil))
+        tunnel (atom nil)]
+    (try
+      (reset! tunnel (p/process (concat ["ssh" "-N" "-L" (str port ":localhost:" repl-port)]
+                                        (ssh-args)
+                                        ["tunnel"])))
+      (if (= :timeout (:error (wait-for (partial repl-up? port))))
+        (print-error (str/join "\n" ["It seems there is no nREPL server listening in your application."
+                                     "Check https://docs.apps.garden#nrepl-support for information."]))
+        (if eval
+          (println (first (:vals (nrepl/eval-expr {:host "127.0.0.1"
+                                                   :port port
+                                                   :expr eval}))))
+          (do (println (str "Forwarded port " port " to remote nREPL. Use ^-C to quit."))
+              (spit ".nrepl-port" port)
+              (if headless
+                @(promise)
+                (connect-repl port)))))
+      (catch Throwable _
+        (if old-port
+          (spit ".nrepl-port" old-port)
+          (fs/delete-if-exists ".nrepl-port"))
+        (p/destroy @tunnel)
+        (println "Tunnel closed")))))
 
 
 (defn add-secret [{:keys [opts]}]
@@ -541,6 +555,7 @@
      :eval
      {:alias :e
       :ref "<string>",
+      :coerce :string
       :require false,
       :desc "An expression to evaluate in the context of the remote app"}
      :port
