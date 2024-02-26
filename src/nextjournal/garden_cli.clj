@@ -14,7 +14,8 @@
             [cheshire.core :as json]
             [clojure.java.io :as io]
             [babashka.nrepl-client :as nrepl]
-            [nextjournal.edit-distance :as edit-distance]))
+            [nextjournal.edit-distance :as edit-distance]
+            [nextjournal.start-command :as start-command]))
 
 (def version (let [semver (try (str/trim (slurp (io/resource "VERSION")))
                                (catch Exception e nil))
@@ -158,22 +159,8 @@
         storage-dir (fs/absolutize ".garden/storage")
         timeout-seconds 10
         garden-alias (edn/read-string (slurp "deps.edn"))
-        sdeps {:deps {'io.github.nextjournal/garden-nrepl {:git/sha "911ca60148f893e2791287741f9fd97b852ea702"}}
-               :aliases {:nextjournal/garden-nrepl {:exec-fn 'nextjournal.garden-nrepl/start!}}}
-        skip-inject-nrepl (:skip-inject-nrepl opts)
-        start-command (filterv some?
-                               ["clojure"
-                                "-Sdeps" (pr-str sdeps)
-                                "-J-Dclojure.main.report=stdout"
-                                (when-some [extra-aliases (get garden-alias :nextjournal.garden/aliases)]
-                                  (when-not (every? keyword? extra-aliases)
-                                    (throw (ex-info "`:nextjournal.garden/aliases` must be a vector of keywords" opts)))
-                                  (str "-A" (str/join extra-aliases)))
-                                (if (not skip-inject-nrepl)
-                                  "-X:nextjournal/garden:nextjournal/garden-nrepl"
-                                  "-X:nextjournal/garden")
-                                ":host" "\"0.0.0.0\"" ":port" "7777"])
         app-process (promise)
+        start-command (start-command/start-command (assoc opts :garden-alias garden-alias))
         old-port (try (slurp ".nrepl-port") (catch java.io.FileNotFoundException _ nil))]
     (-> (Runtime/getRuntime)
         (.addShutdownHook (Thread. (fn []
