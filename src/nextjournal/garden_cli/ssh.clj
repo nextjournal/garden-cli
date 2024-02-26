@@ -2,21 +2,22 @@
   (:require [babashka.process :as p])
   (:import [java.net Socket ConnectException]))
 
-(def jumphost "deploy@jump.sauspiel.de")
-(def hosts {:production "deploy@172.16.227.70"
-            :staging "deploy@62.113.212.138"})
+(def hosts {:production ["-J" "deploy@jump.sauspiel.de" "deploy@172.16.227.70"]
+            :staging ["-J" "deploy@jump.sauspiel.de" "deploy@62.113.212.138"]
+            :dev ["-p" "2222" "deploy@127.0.0.1"]})
 (defonce tunnels (atom {}))
 
 (comment
   (def port 2019)
-  (def env :staging)
-  (def p (p/process ["ssh" "-N" (format "-L:%s:localhost:%s" port port) "-J" jumphost (hosts env)]
+  (def env :dev)
+  (def p (p/process (concat ["ssh" "-N" (format "-L:%s:localhost:%s" port port)]
+                            (hosts env))
                     {:shutdown p/destroy-tree
-                     :out :inherit
-                     :err :inherit}))
+                     :out :string
+                     :err :string}))
   (p/destroy-tree p))
 
-(def ssh-opts ["-N" "-S" "none" "-o" "StrictHostKeyChecking=no" "-o" "UserKnownHostsFile=/dev/null"])
+(def ssh-opts ["-N" "-S" "none" "-o" "StrictHostKeyChecking=no" "-o" "UserKnownHostsFile=/dev/null" "-o" "ControlMaster=no" "-o" "ControlPath=none"])
 
 (defn tunnel-up? [port]
   (try (Socket. "localhost" port)
@@ -29,7 +30,8 @@
   (when-not (get-in @tunnels [env port])
     (swap! tunnels assoc-in [env port] (p/process (concat ["ssh"]
                                                           ssh-opts
-                                                          [(format "-L:%s:%s:%s" port remote-host remote-port) "-J" jumphost (hosts env)])
+                                                          [(format "-L:%s:%s:%s" port remote-host remote-port)]
+                                                          (hosts env))
                                                   {:inherit true
                                                    :shutdown p/destroy-tree}))
     ;; wait for tunnel
