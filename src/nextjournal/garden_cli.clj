@@ -230,7 +230,7 @@
 (defn sftp [{:keys [opts]}]
   (let [{:keys [id]} (call-api (merge {:command "info"} opts))
         [host port] (clojure.string/split arboretum-ssh-host #":")]
-    (shell (concat ["sftp" (str "-o SetEnv SFTP_PROJECT=" id)]
+    (shell (concat ["sftp" (str "-o SetEnv=SFTP_PROJECT=" id)]
                    (when port ["-P" port])
                    [host]))))
 
@@ -243,29 +243,19 @@
             (println message))
         (print-error message)))))
 
-(def cols '[name status git-rev url deployed-at deployed-by owner groups])
-(def col-sep 2)
-(def max-cell-length (apply max (map (comp count name) cols)))
-(defn pad [entry max-length] (apply str (repeat (+ col-sep (- max-length (count (name entry)))) " ")))
-
-;TODO disentangle formatting
+(def cols [:name :status :git-rev :url :deployed-at :deployed-by :owner :groups :quota-used :quota-max])
 (defn info [{:keys [opts]}]
   (let [{:as m :keys [ok message]} (call-api (assoc opts :command "info"))]
     (if ok
-      (let [info-map (select-keys m (map keyword cols))]
-        (doseq [[k v] info-map]
-          (if (coll? v)
-            (do (println (str (name k) ":" (pad k max-cell-length) (first v)))
-                (doseq [v (rest v)]
-                  (println (str (pad "" max-cell-length) " " v))))
-            (when v (println (str (name k) ":" (pad k max-cell-length) v)))))
-        info-map)
+      (do (println (cli/format-table {:rows (map (juxt name (comp str m)) cols)
+                                   :indent 0}))
+          m)
       (println message))))
 
 (defn list-projects [_]
   (let [{:keys [ok message projects]} (call-api {:command "list-projects"})]
     (if ok
-      (do (pp/print-table (remove #{'owner 'groups} cols)
+      (do (pp/print-table (map (comp symbol name) (remove #{:owner :groups :quota-used :quota-max} cols))
                           (map #(update-keys % (comp symbol name)) projects))
           projects)
       (println message))))
