@@ -1,0 +1,5 @@
+{:data-fn garden.template/data-fn
+ :transform
+ [["build" ""
+   {"deps.tmpl" "deps.edn"}
+   :only]]}

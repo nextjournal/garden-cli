@@ -1,0 +1,9 @@
+{:deps {io.github.nextjournal/clerk {:git/sha "{{clerk-sha}}"}
+        ;; helper libraries for https://application.garden
+        ;; check https://docs.apps.garden for documentation and use as needed
+        ;;io.github.nextjournal/garden-cron {:git/sha "{{garden-cron-sha}}"}
+        ;;io.github.nextjournal/garden-id {:git/sha "{{garden-id-sha}}"}
+        ;;io.github.nextjournal/garden-email {:git/sha "{{garden-email-sha}}"}
+        }
+ :aliases
+ {:nextjournal/garden {:exec-fn nextjournal.clerk/serve!}}}

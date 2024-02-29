@@ -15,7 +15,8 @@
             [clojure.java.io :as io]
             [babashka.nrepl-client :as nrepl]
             [nextjournal.edit-distance :as edit-distance]
-            [nextjournal.start-command :as start-command]))
+            [nextjournal.start-command :as start-command]
+            [org.corfield.new :as deps-new]))
 
 (def version (let [semver (try (str/trim (slurp (io/resource "VERSION")))
                                (catch Exception e nil))
@@ -82,12 +83,11 @@
 (defn reset []
   (fs/delete-if-exists "garden.edn"))
 
-(defn template [target-dir]
-  (let [perms "rwxr-xr-x"]
-    (fs/copy-tree (fs/path (io/resource "project-template")) target-dir {:replace-existing true
-                                                                         :posix-file-permissions perms})
-    (fs/walk-file-tree target-dir {:pre-visit-dir (fn [dir _] (fs/set-posix-file-permissions dir perms) :continue)
-                                   :visit-file (fn [file _] (fs/set-posix-file-permissions file perms) :continue)})))
+(defn template [project-name]
+  (deps-new/create {:template 'garden/template
+                    :name project-name
+                    :target-dir "."
+                    :overwrite true} ))
 
 (defn project-dir []
   (fs/cwd))
@@ -117,8 +117,6 @@
     (let [project-name (or (-> opts :project)
                            (when-not (:force opts) (:project (read-config))))]
       (when (:force opts) (reset))
-      (when (empty? (filter #(not= ".git" %) (map fs/file-name (fs/list-dir (project-dir)))))
-        (template target-dir))
       (if (garden-project?)
         (print-error (format "There is already an existing application.garden project (%s) in this repository. Use --force to overwrite."
                              (:project (read-config))))
@@ -129,6 +127,8 @@
           (if ok
             (do
               (println message)
+              (when (empty? (filter #(not= ".git" %) (map fs/file-name (fs/list-dir (project-dir)))))
+                (template name))
               (when-not (-> opts :project)
                 (println "You can rename your project at any time via `garden rename <your-name>`."))
               (if (empty-git-repo? target-dir)
