@@ -16,17 +16,12 @@
                                          (when (and github-user github-token)
                                            {:basic-auth [github-user github-token]})))
         parsed-body (-> response :body (cheshire/parse-string true))]
-    (cond
-      (and (= 403 (:status response))
-           (str/includes? url "api.github")
-           (str/includes? (:message parsed-body) "rate limit"))
-      (binding [*out* *err*]
-        (println "You've hit the GitHub rate-limit (60 reqs/hr).
+    (if (and (= 403 (:status response))
+             (str/includes? url "api.github")
+             (str/includes? (:message parsed-body) "rate limit"))
+      (throw (ex-info "You've hit the GitHub rate-limit (60 reqs/hr).
   You can set the environment variables NEIL_GITHUB_USER to your GitHub user
-  and NEIL_GITHUB_TOKEN to a GitHub API Token to increase the limit.")
-        (System/exit 1))
-
-      :else
+  and NEIL_GITHUB_TOKEN to a GitHub API Token to increase the limit." {}))
       parsed-body)))
 
 (defn default-branch [lib]
@@ -41,15 +36,17 @@
       (symbol)))
 
 (defn latest-github-sha [lib]
-  (let [lib (clean-github-lib lib)
-        branch (default-branch lib)]
-    (get (curl-get-json (format "https://api.github.com/repos/%s/%s/commits/%s"
-                                (namespace lib) (name lib) branch))
-         :sha)))
+  (try (let [lib (clean-github-lib lib)
+         branch (default-branch lib)]
+     (get (curl-get-json (format "https://api.github.com/repos/%s/%s/commits/%s"
+                                 (namespace lib) (name lib) branch))
+          :sha))
+       (catch clojure.lang.ExceptionInfo e
+         (println (ex-message e)))))
 
 (defn data-fn
   [data]
-  {:clerk-sha (latest-github-sha "io.github.nextjournal/clerk")
-   :garden-email-sha (latest-github-sha "io.github.nextjournal/garden-email")
-   :garden-id-sha (latest-github-sha "io.github.nextjournal/garden-id")
-   :garden-cron-sha (latest-github-sha "io.github.nextjournal/garden-cron")})
+  {:clerk-sha (or (latest-github-sha "io.github.nextjournal/clerk") "9c38ff3ef240c9bd21e596792adb2ebdbb5a738d")
+   :garden-email-sha (or (latest-github-sha "io.github.nextjournal/garden-email") "<garden-email-sha>")
+   :garden-id-sha (or (latest-github-sha "io.github.nextjournal/garden-id") "<garden-id-sha>")
+   :garden-cron-sha (or (latest-github-sha "io.github.nextjournal/garden-cron") "<garden-cron-sha>")})
