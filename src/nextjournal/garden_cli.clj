@@ -352,10 +352,10 @@
           (println (first (:vals (nrepl/eval-expr {:host "127.0.0.1"
                                                    :port port
                                                    :expr eval}))))
-          (do (println (str "Forwarded port " port " to remote nREPL. Use ^-C to quit."))
+          (do (println (str "Forwarded port " port " to remote nREPL."))
               (spit ".nrepl-port" port)
               (if headless
-                @(promise)
+                (do (println "Use ^-C to quit.") @(promise))
                 (connect-repl port)))))
       (catch Throwable _
         (if old-port
