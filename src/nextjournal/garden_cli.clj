@@ -473,11 +473,11 @@
   {"stop"
    {:fn stop,
     :spec (merge default-spec project-spec),
-    :help "Stop the application in your garden"},
+    :help "Stop a project in your garden"},
    "run"
    {:fn run,
     :spec (merge default-spec project-spec),
-    :help "Run the application locally"},
+    :help "Run a project locally"},
    "deploy"
    {:fn deploy,
     :help "Deploy a project to application.garden",
@@ -521,7 +521,7 @@
     :help "List your projects and their status"},
    "repl"
    {:fn repl ,
-    :help "Open a REPL connected to the deployed application",
+    :help "Open a REPL connected to the deployed project",
     :spec
     (assoc
      (merge default-spec project-spec)
@@ -550,7 +550,7 @@
       :coerce :boolean,
       :desc "Do not ask for confirmation"}),
     :help
-    "Stop the application and remove all project data from your garden (!)"},
+    "Stop the project and remove all project data from your garden (!)"},
    "info"
    {:fn info,
     :spec (merge default-spec project-spec)  ,
@@ -586,18 +586,17 @@
    "version" {:fn #'print-version, :help "Print garden cli version"},
    "help" {:fn #'help, :help "Show help for a command"},
    "secrets"
-   {:fn (fn [_] (help {:cmds ["secrets"]})),
-    :help "Manage secrets",
+   {:help "Manage secrets",
     "add"
     {:fn add-secret,
      :args->opts [:secret-name],
      :help "Add a secret to a project",
      :spec
      (assoc
-      (merge default-spec project-spec secrets-spec)
-      :force
-      {:coerce :boolean,
-       :description "Overwrite an existing secret"})},
+       (merge default-spec project-spec secrets-spec)
+       :force
+       {:coerce :boolean,
+        :desc "Overwrite an existing secret"})},
     "remove"
     {:fn remove-secret,
      :args->opts [:secret-name],
@@ -608,8 +607,7 @@
      :spec (merge default-spec project-spec) ,
      :help "List all secrets for a project"}},
    "groups"
-   {:fn (fn [_] (help {:cmds ["groups"]})),
-    :help "Manage groups",
+   {:help "Manage groups",
     "list" {:fn list-groups, :help "List the groups you are part of"},
     "create"
     {:fn create-group,
@@ -694,7 +692,7 @@
              :desc "Do not ask for confirmation"})}},
    "sftp"
    {:fn sftp,
-    :spec (merge default-spec project-spec),
+    :spec project-spec,
     :help "Spawn a SFTP session to your project's persistent storage"}})
 
 (defn keyword-map [m]
@@ -785,7 +783,7 @@
     (when (seq subcommands)
       (cli/format-table
        {:rows (mapv (fn [c] (let [subcommand (concat cmds [c])]
-                              [(signature cmd-tree subcommand) (help-text cmd-tree subcommand)]))
+                              [(str/join " " subcommand) (help-text cmd-tree subcommand)]))
                     subcommands)
         :indent 0}))))
 
@@ -801,32 +799,36 @@
 
 (defn print-available-commands [cmd-tree command]
   (when-let [s (subcommand-help-text cmd-tree command)]
-    (println)
-    (println "Available commands:")
     (println (indent 2 s))))
 
 (defn help [{:as m :keys [args]}]
-  (if (get-in cmd-tree args)
-    (do
-      (print-command-help cmd-tree args)
-      (print-command-options cmd-tree args)
-      (print-available-commands cmd-tree args))
-    (do
-      (println "Unknown command")
-      (print-available-commands cmd-tree []))))
+  (cond (nil? args) (do
+                      (println)
+                      (println "Available commands (use --help for detailed help on a command):")
+                      (println)
+                      (print-available-commands cmd-tree []))
+        (get-in cmd-tree args) (do
+                                 (print-command-help cmd-tree args)
+                                 (print-command-options cmd-tree args)
+                                 (print-available-commands cmd-tree args))
+        :else (do
+                (println)
+                (println "Unknown command. Available commands (use --help for detailed help on a command):")
+                (println)
+                (print-available-commands cmd-tree []))))
 
 (defn dispatch [cmd-tree args {:as opts :keys [middleware]}]
   (let [{:as res :keys [error cmd-info dispatch wrong-input available-commands]} (dispatch' cmd-tree args opts)]
     (if error
       (case error
-        :input-exhausted (print-error (str "Available commands:\n\n" (subcommand-help-text cmd-tree dispatch)))
+        :input-exhausted (print-error (str "Available commands (use --help for detailed help on a command):\n\n" (subcommand-help-text cmd-tree dispatch)))
         :no-match (print-error (let [candidates (edit-distance/candidates wrong-input available-commands)]
                                  (if (seq candidates)
                                    (str "Unknown command. Did you mean one of:\n"
                                         (indent 2 (str/join "\n" (map
                                                                   #(str/join " " (concat ["garden"] dispatch [%]))
                                                                   candidates))))
-                                   (str "Available commands:\n\n" (subcommand-help-text cmd-tree dispatch))))))
+                                   (str "Unknown command. Available commands:\n\n" (subcommand-help-text cmd-tree dispatch))))))
       (let [res (reduce (fn [r m] (m r)) res middleware)]
         ((get-in res [:cmd-info :fn]) res)))))
 
@@ -870,6 +872,8 @@
                    (do
                      (doseq [error errors]
                        (print-error error))
+                     (print-error "")
+                     (print-error "Use --help for detailed help on a command")
                      {:exit-code 1})
                    (f m))))))
 
