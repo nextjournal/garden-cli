@@ -157,7 +157,7 @@
         url (str "http://localhost:" http-port)
         nrepl-port 6666
         storage-dir (fs/absolutize ".garden/storage")
-        timeout-seconds 10
+        timeout-seconds 60
         garden-alias (edn/read-string (slurp "deps.edn"))
         app-process (promise)
         start-command (start-command/start-command (assoc opts :garden-alias garden-alias))
