@@ -175,6 +175,7 @@
                             (println "Application ready on" url)
                             (do
                               (print-error (format "Application did not start after %ss." timeout-seconds))
+                              (print-error "Make sure your app binds to 0.0.0.0:%s and reponds with a 200 status code to HEAD requests to `/`.")
                               (System/exit 1)))))
       .start)
     (fs/create-dirs storage-dir)
