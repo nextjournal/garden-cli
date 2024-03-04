@@ -256,9 +256,12 @@
 (defn list-projects [_]
   (let [{:keys [ok message projects]} (call-api {:command "list-projects"})]
     (if ok
-      (do (pp/print-table (map (comp symbol name) (remove #{:owner :groups :quota-used :quota-max} cols))
-                          (map #(update-keys % (comp symbol name)) projects))
-          projects)
+      (if (seq projects)
+        (do (pp/print-table (map (comp symbol name) (remove #{:owner :groups :quota-used :quota-max} cols))
+                            (map #(update-keys % (comp symbol name)) projects))
+            projects)
+        (do (print-error "No projects, use 'garden init' to create one!")
+            {:exit-code 0}))
       (println message))))
 
 (defn logs [{:keys [opts]}]
