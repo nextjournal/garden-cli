@@ -5,7 +5,7 @@
                       :keys [skip-inject-nrepl garden-alias sdeps]
                       :or {sdeps {}}}]
   (let [sdeps (cond-> sdeps
-                (not skip-inject-nrepl) (merge {:deps {'io.github.nextjournal/garden-nrepl {:git/sha "911ca60148f893e2791287741f9fd97b852ea702"}}
+                (not skip-inject-nrepl) (merge {:deps {'io.github.nextjournal/garden-nrepl {:git/sha "d64532bf7c16565b0dfc825bc27eafdb453c1a61"}}
                                                 :aliases {:nextjournal/garden-nrepl {:exec-fn 'nextjournal.garden-nrepl/start!}}}))]
     (filterv some?
              ["clojure"
