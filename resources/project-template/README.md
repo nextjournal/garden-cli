@@ -1,6 +1,6 @@
-# {{raw-name}}
+# Application Garden Example
 
-{{description}}
+A minimal example project for use with https://application.garden
 
 ## Develop
 
@@ -11,7 +11,3 @@ Install the `garden` utility as described [here](https://docs.apps.garden/#insta
 ## Deploy
 
 `garden deploy`
-
-## License
-
-Copyright © {{now/year}} {{developer}}

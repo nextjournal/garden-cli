@@ -16,7 +16,7 @@
             [babashka.nrepl-client :as nrepl]
             [nextjournal.edit-distance :as edit-distance]
             [nextjournal.start-command :as start-command]
-            [org.corfield.new :as deps-new]))
+            [nextjournal.garden-cli.template :as template]))
 
 (def version (let [semver (try (str/trim (slurp (io/resource "VERSION")))
                                (catch Exception e nil))
@@ -83,12 +83,6 @@
 (defn reset []
   (fs/delete-if-exists "garden.edn"))
 
-(defn template [project-name]
-  (deps-new/create {:template 'garden/template
-                    :name project-name
-                    :target-dir "."
-                    :overwrite true} ))
-
 (defn project-dir []
   (fs/cwd))
 
@@ -128,7 +122,7 @@
             (do
               (println message)
               (when (empty? (filter #(not= ".git" %) (map fs/file-name (fs/list-dir (project-dir)))))
-                (template name))
+                (template/template "."))
               (when-not (-> opts :project)
                 (println "You can rename your project at any time via `garden rename <your-name>`."))
               (if (empty-git-repo? target-dir)

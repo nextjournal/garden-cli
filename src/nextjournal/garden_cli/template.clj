@@ -1,8 +1,10 @@
-(ns garden.template
+(ns nextjournal.garden-cli.template
   (:require
    [babashka.http-client :as http]
+   [babashka.fs :as fs]
    [cheshire.core :as cheshire]
-   [clojure.string :as str]))
+   [clojure.string :as str]
+   [clojure.java.io :as io]))
 
 ;; adapted from https://github.com/babashka/neil
 
@@ -45,8 +47,26 @@
          (println (ex-message e)))))
 
 (defn data-fn
-  [data]
+  []
   {:clerk-sha (or (latest-github-sha "io.github.nextjournal/clerk") "9c38ff3ef240c9bd21e596792adb2ebdbb5a738d")
    :garden-email-sha (or (latest-github-sha "io.github.nextjournal/garden-email") "<garden-email-sha>")
    :garden-id-sha (or (latest-github-sha "io.github.nextjournal/garden-id") "<garden-id-sha>")
    :garden-cron-sha (or (latest-github-sha "io.github.nextjournal/garden-cron") "<garden-cron-sha>")})
+
+(defn substitute [replacements string]
+  (reduce (fn [s k] (str/replace s (str "{{" (name k) "}}") (replacements k)))
+          string
+          (keys replacements)))
+
+(defn substitute-file [path replacements]
+  (->> (slurp path)
+       (substitute replacements)
+       (spit path)))
+
+(defn template [target-dir]
+  (let [perms "rwxr-xr-x"]
+    (fs/copy-tree (fs/path (io/resource "project-template")) target-dir {:replace-existing true
+                                                                         :posix-file-permissions perms})
+    (fs/walk-file-tree target-dir {:pre-visit-dir (fn [dir _] (fs/set-posix-file-permissions dir perms) :continue)
+                                   :visit-file (fn [file _] (fs/set-posix-file-permissions file perms) :continue)})
+    (substitute-file (str (fs/path target-dir "deps.edn")) (data-fn))))
