@@ -10,6 +10,10 @@ targetdir="$(readlink -f "$1")"
 mkdir -p "$targetdir"
 cd "$clidir"
 bb_version="$(bb -o "(:min-bb-version (clojure.edn/read-string (slurp \"bb.edn\")))")"
+cd resources/project-template
+zip -r project-template.zip .
+mv project-template.zip ..
+cd ../..
 bb uberjar cli.jar -m nextjournal.garden-cli
 tmpdir="$(mktemp -d)"
 mv cli.jar "$tmpdir"

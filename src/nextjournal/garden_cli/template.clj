@@ -4,7 +4,8 @@
    [babashka.fs :as fs]
    [cheshire.core :as cheshire]
    [clojure.string :as str]
-   [clojure.java.io :as io]))
+   [clojure.java.io :as io]
+   [nextjournal.garden-cli.unzip :as unzip]))
 
 ;; adapted from https://github.com/babashka/neil
 
@@ -64,9 +65,14 @@
        (spit path)))
 
 (defn template [target-dir]
-  (let [perms "rwxr-xr-x"]
-    (fs/copy-tree (fs/path (io/resource "project-template")) target-dir {:replace-existing true
-                                                                         :posix-file-permissions perms})
-    (fs/walk-file-tree target-dir {:pre-visit-dir (fn [dir _] (fs/set-posix-file-permissions dir perms) :continue)
-                                   :visit-file (fn [file _] (fs/set-posix-file-permissions file perms) :continue)})
+  (let [perms "rwxr-xr-x"
+        template (io/resource "project-template")]
+    (if (= "file" (.getProtocol template))
+      ;;running from git dep
+      (do (fs/copy-tree (fs/path template) target-dir {:replace-existing true
+                                                       :posix-file-permissions perms})
+          (fs/walk-file-tree target-dir {:pre-visit-dir (fn [dir _] (fs/set-posix-file-permissions dir perms) :continue)
+                                         :visit-file (fn [file _] (fs/set-posix-file-permissions file perms) :continue)}))
+      ;;running from jar
+      (unzip/unzip (io/resource "project-template.zip") target-dir))
     (substitute-file (str (fs/path target-dir "deps.edn")) (data-fn))))
