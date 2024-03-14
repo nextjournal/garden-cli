@@ -16,7 +16,7 @@
             [babashka.nrepl-client :as nrepl]
             [nextjournal.edit-distance :as edit-distance]
             [nextjournal.start-command :as start-command]
-            [nextjournal.garden-cli.template :as template]))
+            [nextjournal.template :as template]))
 
 (def version (let [semver (try (str/trim (slurp (io/resource "VERSION")))
                                (catch Exception e nil))
@@ -123,7 +123,9 @@
               (println message)
               (update-config! assoc :project name)
               (when (empty? (filter #(not (#{".git" "garden.edn"} %)) (map fs/file-name (fs/list-dir (project-dir)))))
-                (template/template ".")
+                (template/create (-> opts
+                                     (assoc :name name)
+                                     (dissoc :force :quiet :output-format)))
                 (sh ["git" "add" "."])
                 (sh ["git" "commit" "-m" "init"]))
               (when-not (-> opts :project)
@@ -580,7 +582,11 @@
       :force
       {:alias :f,
        :coerce :boolean,
-       :desc "Ignore an existing `garden.edn` and re-initialize the project with a new name"})),
+       :desc "Ignore an existing `garden.edn` and re-initialize the project with a new name"}
+      :template
+      {:coerce :string
+       :desc "Template for initializing a project (see https://docs.apps.garden#project-templates for more info)"
+       :default "io.github.nextjournal/garden-template"})),
     :help
     "Initialize an application.garden project in the local directory"},
    "version" {:fn #'print-version, :help "Print garden cli version"},

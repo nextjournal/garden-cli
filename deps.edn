@@ -1,2 +1,4 @@
 {:paths ["src" "resources"]
- :deps {io.github.babashka/nrepl-client {:git/sha "c83b15906d224b67a67951343b05623c4c00cdcf"}}}
+ :deps {io.github.babashka/nrepl-client {:git/sha "c83b15906d224b67a67951343b05623c4c00cdcf"}
+        io.github.seancorfield/deps-new {:git/tag "v0.6.0"
+                                         :git/sha "64e79d1"}}}
