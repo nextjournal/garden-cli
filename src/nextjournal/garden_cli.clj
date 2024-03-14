@@ -19,13 +19,13 @@
             [nextjournal.template :as template]))
 
 (def version (let [semver (try (str/trim (slurp (io/resource "VERSION")))
-                               (catch Exception e nil))
-                   gitrev (try (or (let [{:keys [exit out]} (sh ["git" "rev-parse" "--short" "HEAD"] {:dir (str (fs/parent *file*))
-                                                                                                      :out :string})]
-                                     (when (zero? exit)
-                                       (str/trim out))
-                                     (System/getProperty "nextjournal.garden.rev")))
-                               (catch Exception e nil))
+                               (catch Exception _ nil))
+                   gitrev (try (let [{:keys [exit out]} (sh ["git" "rev-parse" "--short" "HEAD"] {:dir (str (fs/parent *file*))
+                                                                                                  :out :string})]
+                                 (when (zero? exit)
+                                   (str/trim out))
+                                 (System/getProperty "nextjournal.garden.rev"))
+                               (catch Exception _ nil))
                    version (str "v" semver (when gitrev (str "-" gitrev)))]
                version))
 
@@ -88,7 +88,7 @@
 
 (defn git-repo? [target-dir]
   (try (= 0 (:exit (sh ["git" "status"] {:dir target-dir})))
-       (catch Exception e false)))
+       (catch Exception _ false)))
 
 (defn path-from-git-root-parent []
   (not-empty (str/trim (str (:out (sh "git rev-parse --show-prefix"))))))
@@ -274,7 +274,7 @@
 
 (defn publish [{:as m :keys [opts]}]
   (let [{:keys [project domain]} opts
-        {:as ret :keys [ok message ip txt-record]} (call-api {:command "get-domain-verification-info"
+        {:keys [ok message ip txt-record]} (call-api {:command "get-domain-verification-info"
                                                       :project project
                                                       :domain domain})]
     (if ok
@@ -341,7 +341,7 @@
   (let [{:keys [repl-port]} (call-api (merge {:command "info"} opts))
         {:keys [port eval headless]} opts
         port (or port (free-port))
-        old-port (try (slurp ".nrepl-port") (catch java.io.FileNotFoundException e nil))
+        old-port (try (slurp ".nrepl-port") (catch java.io.FileNotFoundException _ nil))
         tunnel (atom nil)]
     (try
       (reset! tunnel (p/process (concat ["ssh" "-N" "-L" (str port ":localhost:" repl-port)]
@@ -443,8 +443,9 @@
                           (= group-handle (read-line))))]
     (when continue?
       (let [{:as ret :keys [ok message]} (call-api (assoc opts :command "delete-group"))]
-        (println message)
-        ret))))
+        (if ok
+          (do (println message) ret)
+          (print-error message))))))
 
 (def default-spec
   {:quiet {:coerce :boolean
@@ -760,9 +761,9 @@
   (dispatch-tree' cmd-tree args opts))
 
 (comment
-  (= :input-exhausted (:error (dispatch' cmd-tree [])))
-  (= :no-match (:error (dispatch' cmd-tree ["foo"])))
-  (dispatch' cmd-tree ["help" "list"]))
+  (= :input-exhausted (:error (dispatch' cmd-tree [] {})))
+  (= :no-match (:error (dispatch' cmd-tree ["foo"] {})))
+  (dispatch' cmd-tree ["help" "list"] {}))
 
 (defn indent
   "indent a multiline string by <indent> spaces"
@@ -773,7 +774,7 @@
 
 (defn signature [cmd-tree cmds]
   (when (seq cmds)
-    (when-let [{:as cmd-info :keys [args->opts]} (get-in cmd-tree cmds)]
+    (when-let [{:as _cmd-info :keys [args->opts]} (get-in cmd-tree cmds)]
      (str/join " " (concat cmds (map #(str "<" (name %) ">") args->opts))))))
 
 (defn help-text [cmd-tree cmds]
@@ -807,7 +808,7 @@
   (when-let [s (subcommand-help-text cmd-tree command)]
     (println (indent 2 s))))
 
-(defn help [{:as m :keys [args]}]
+(defn help [{:as _m :keys [args]}]
   (cond (nil? args) (do
                       (println)
                       (println "Available commands (use --help for detailed help on a command):")
@@ -824,7 +825,7 @@
                 (print-available-commands cmd-tree []))))
 
 (defn dispatch [cmd-tree args {:as opts :keys [middleware]}]
-  (let [{:as res :keys [error cmd-info dispatch wrong-input available-commands]} (dispatch' cmd-tree args opts)]
+  (let [{:as res :keys [error _cmd-info dispatch wrong-input available-commands]} (dispatch' cmd-tree args opts)]
     (if error
       (case error
         :input-exhausted (print-error (str "Available commands (use --help for detailed help on a command):\n\n" (subcommand-help-text cmd-tree dispatch)))
@@ -916,7 +917,7 @@
          (println (ex-message e#))
          (System/exit 1)))))
 
-(defn -main [& args]
+(defn -main [& _]
   (with-exception-reporting
     (migrate-config-file!)
     (dispatch cmd-tree *command-line-args* {:middleware [wrap-with-error-reporting
