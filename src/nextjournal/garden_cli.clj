@@ -121,15 +121,17 @@
           (if ok
             (do
               (println message)
-              (when (empty? (filter #(not= ".git" %) (map fs/file-name (fs/list-dir (project-dir)))))
-                (template/template "."))
+              (update-config! assoc :project name)
+              (when (empty? (filter #(not (#{".git" "garden.edn"} %)) (map fs/file-name (fs/list-dir (project-dir)))))
+                (template/template ".")
+                (sh ["git" "add" "."])
+                (sh ["git" "commit" "-m" "init"]))
               (when-not (-> opts :project)
                 (println "You can rename your project at any time via `garden rename <your-name>`."))
               (if (empty-git-repo? target-dir)
                 (println (str "First create a commit, then run `garden deploy` to deploy your project."))
                 (println (str " Run `garden deploy` to deploy your project.")))
-              (setup-git-remote! (git-remote-url id))
-              (update-config! assoc :project name))
+              (setup-git-remote! (git-remote-url id)))
 
             (print-error message)))))))
 
