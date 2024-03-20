@@ -9,6 +9,7 @@
                                                 :aliases {:nextjournal/garden-nrepl {:exec-fn 'nextjournal.garden-nrepl/start!}}}))]
     (filterv some?
              ["clojure"
+              "-Srepro"
               "-Sdeps" (pr-str sdeps)
               "-J-Dclojure.main.report=stdout"
               (when-some [extra-aliases (get garden-alias :nextjournal.garden/aliases)]
