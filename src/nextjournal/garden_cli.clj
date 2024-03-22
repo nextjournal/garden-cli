@@ -242,7 +242,8 @@
             (println message))
         (print-error message)))))
 
-(def cols [:name :status :git-rev :url :deployed-at :deployed-by :owner :groups :quota-used :quota-max])
+(def cols [:name :status :git-rev :url :deployed-at :deployed-by :owner :groups])
+
 (defn info [{:keys [opts]}]
   (let [{:as m :keys [ok message]} (call-api (assoc opts :command "info"))]
     (if ok
@@ -251,13 +252,26 @@
           m)
       (println message))))
 
+(defn mb [long] (try (quot long (* 1024 1024)) (catch Throwable _ nil)))
+(defn gb [long] (try (quot long (* 1024 1024 1024)) (catch Throwable _ nil)))
+(defn perc [x y] (try (float (/ (* 100 x) y)) (catch Throwable _ nil)))
+
 (defn list-projects [_]
-  (let [{:keys [ok message projects]} (call-api {:command "list-projects"})]
+  (let [{:as resp :keys [ok message projects running-projects-limit running-projects-count storage-quota-used storage-quota-max]}
+        (call-api {:command "list-projects"})]
     (if ok
       (if (seq projects)
-        (do (pp/print-table (map (comp symbol name) (remove #{:owner :groups :quota-used :quota-max} cols))
+        (do (pp/print-table (map (comp symbol name) (remove #{:owner :groups} cols))
                             (map #(update-keys % (comp symbol name)) projects))
-            projects)
+            (println)
+            (when (and running-projects-count running-projects-limit)
+              (println (format "Running projects limit: %s/%s" running-projects-count running-projects-limit)))
+            (when (and storage-quota-max storage-quota-used)
+              (println (format "Used storage quota: %dMB/%dGB (%.1f%%)"
+                               (mb storage-quota-used)
+                               (gb storage-quota-max)
+                               (perc storage-quota-used storage-quota-max))))
+            (dissoc resp :ok :message))
         (do (print-error "No projects, use 'garden init' to create one!")
             {:exit-code 0}))
       (println message))))
