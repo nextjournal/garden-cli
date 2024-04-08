@@ -280,7 +280,11 @@
   (call-api (assoc opts :command "logs" :as :stream)))
 
 (defn restart [{:keys [opts]}]
-  (call-api (assoc opts :command "restart" :as :stream)))
+  (let [working-dir (path-from-git-root-parent)]
+    (call-api (-> opts
+                  (assoc :command "restart" :as :stream)
+                  (cond-> working-dir
+                    (assoc :working-dir working-dir))))))
 
 (defn stop [m]
   (let [{:keys [ok message]} (call-api (merge {:command "stop"} (:opts m)))]
