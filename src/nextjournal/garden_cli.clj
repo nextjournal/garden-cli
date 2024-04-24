@@ -45,8 +45,15 @@
     (println s))
   {:exit-code 1})
 
+(defn read-config []
+  (try
+    (edn/read-string (slurp "garden.edn"))
+    (catch Throwable _ {})))
+#_(read-config)
+
 (def arboretum-ssh-host
   (or (System/getenv "ARBORETUM_SSH_DEST")
+      (:ssh-server (read-config))
       "arboretum@ssh.application.garden"))
 
 (defn git-remote-url [project] (str "ssh://" arboretum-ssh-host "/" project ".git"))
@@ -60,12 +67,6 @@
              (cond-> ["-n" "-o" "StrictHostKeyChecking=accept-new" "-o" "ControlMaster=no" "-o" "ControlPath=none" host]
                command (conj command)
                body (conj (pr-str body)))))))
-
-(defn read-config []
-  (try
-    (edn/read-string (slurp "garden.edn"))
-    (catch Throwable _ {})))
-#_(read-config)
 
 (defn update-config! [f & args] (spit "garden.edn" (str (pr-str (apply f (read-config) args)) "\n")))
 #_(update-config! assoc :v "1.2.1")
