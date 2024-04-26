@@ -578,7 +578,21 @@
     :spec (merge default-spec project-spec)  ,
     :help "Show information about a project"},
    "logs"
-   {:fn logs, :spec default-spec, :help "Show a project's log on stdout"},
+   {:fn logs
+    :spec {:lines {:alias :n
+                   :ref "<integer>"
+                   :coerce :long
+                   :validate (complement neg?)
+                   :desc "Number of log lines to show"}
+           :line-format
+           (let [valid-formats #{:text :raw :edn :json}]
+             {:alias :f
+              :ref "<line-format>"
+              :coerce :keyword
+              :default :text
+              :validate valid-formats
+              :desc (str "Output format of logs. One of: " (str/join ", " (map name valid-formats)))})}
+    :help "Show a project's log on stdout"},
    "publish"
    {:args->opts [:domain],
     :fn publish,
