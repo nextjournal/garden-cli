@@ -619,7 +619,7 @@
        :desc "Ignore an existing `garden.edn` and re-initialize the project with a new name"}
       :template
       {:coerce :string
-       :desc "Template for initializing a project (see https://docs.apps.garden#project-templates for more info)"
+       :desc "A template name (deps-new compatible) for initializing a project. See https://docs.apps.garden#project-templates for more info or https://github.com/topics/application-garden-template for a list of available templates."
        :default "io.github.nextjournal/garden-template"})),
     :help
     "Initialize an application.garden project in the local directory"},
