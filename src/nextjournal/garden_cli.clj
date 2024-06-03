@@ -123,7 +123,7 @@
             (do
               (println message)
               (update-config! assoc :project name)
-              (when (empty? (filter #(not (#{".git" "garden.edn"} %)) (map fs/file-name (fs/list-dir (project-dir)))))
+              (when (empty? (remove #{".git" "garden.edn" ".garden"} (map fs/file-name (fs/list-dir (project-dir)))))
                 (template/create (-> opts
                                      (assoc :name name)
                                      (dissoc :force :quiet :output-format)))
@@ -292,29 +292,31 @@
     (when-not ok (println message))))
 
 (defn publish [{:as m :keys [opts]}]
-  (let [{:keys [project domain]} opts
-        {:keys [ok message ip txt-record]} (call-api {:command "get-domain-verification-info"
-                                                      :project project
-                                                      :domain domain})]
-    (if ok
-      (do
-        (println (str "Please configure DNS for '" domain "' with the following A record:"))
-        (println ip)
-        (println "and the following TXT record:")
-        (println txt-record)
-        (println "After you have added the records, press enter.")
-        (read-line)
-        (println "Checking configuration...")
-        (Thread/sleep 1000)          ;wait a bit more for DNS changes
-        (let [{:keys [ok message]} (call-api {:command "publish"
-                                              :project project
-                                              :domain domain})]
-          (if ok
-            (do
-              (restart m)
-              (println (str "Done. Your project is available at https://" domain)))
-            (print-error message))))
-      (print-error message))))
+  (let [{:keys [project domain remove]} opts]
+    (if remove
+      (let [{:as result :keys [message]} (call-api {:command "unpublish" :project project :domain domain})]
+        (println message)
+        result)
+      (let [{:keys [ok message ip txt-record]} (call-api {:command "get-domain-verification-info" :project project :domain domain})]
+        (if ok
+          (do
+            (println (str "Please configure DNS for '" domain "' with the following A record:"))
+            (println ip)
+            (println "and the following TXT record:")
+            (println txt-record)
+            (println "After you have added the records, press enter.")
+            (read-line)
+            (println "Checking configuration...")
+            (Thread/sleep 1000)                             ;wait a bit more for DNS changes
+            (let [{:keys [ok message]} (call-api {:command "publish"
+                                                  :project project
+                                                  :domain domain})]
+              (if ok
+                (do
+                  (restart m)
+                  (println (str "Done. Your project is available at https://" domain)))
+                (print-error message))))
+          (print-error message))))))
 
 (defn delete [{:keys [opts]}]
   (let [{:keys [ok message name]} (call-api (assoc opts :command "info"))
@@ -480,7 +482,7 @@
   {:project {:ref "<project-name>"
              :require true
              :message "Command '%s' needs either a --project option or has to be run inside an application.garden project."
-             :desc "The project name"
+             :desc "The name used to identify the project remotely, when not passed garden will infer it from the local `garden.edn`."
              :default-desc "`:project` from `garden.edn`"}})
 
 (def secrets-spec
@@ -600,7 +602,9 @@
     (assoc
      (merge default-spec project-spec)
      :domain
-     {:ref "<domain>", :require true, :desc "The domain"}),
+     {:ref "<domain>", :require true, :desc "The domain"}
+     :remove
+     {:alias :rm :desc "Removes access to project via <domain>. Projects will still be reachable at the default URL."}),
     :help "Publish your project to a custom domain"},
    "restart"
    {:fn restart,
@@ -612,6 +616,7 @@
     (->
      (merge default-spec project-spec)
      (update :project dissoc :require)
+     (assoc-in [:project :desc] "The name of the project to be created, when left blank garden will create a random name for you. You can rename your project at any time later.")
      (assoc
       :force
       {:alias :f,
@@ -844,7 +849,7 @@
 (defn help [{:as _m :keys [args]}]
   (cond (nil? args) (do
                       (println)
-                      (println "Available commands (use --help for detailed help on a command):")
+                      (println "Available commands (run `garden help <command>` for more details):")
                       (println)
                       (print-available-commands cmd-tree []))
         (get-in cmd-tree args) (do
