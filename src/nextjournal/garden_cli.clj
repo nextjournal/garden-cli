@@ -277,6 +277,9 @@
             {:exit-code 0}))
       (println message))))
 
+(defn stats [{:keys [opts]}]
+  (call-api (assoc opts :command "stats" :as :stream)))
+
 (defn logs [{:keys [opts]}]
   (call-api (assoc opts :command "logs" :as :stream)))
 
@@ -579,6 +582,10 @@
    {:fn info,
     :spec (merge default-spec project-spec)  ,
     :help "Show information about a project"},
+   "stats"
+   {:fn stats
+    :spec (merge default-spec project-spec)  ,
+    :help "Show a project's traffic statistics"},
    "logs"
    {:fn logs
     :spec {:lines {:alias :n
