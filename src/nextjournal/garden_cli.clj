@@ -157,7 +157,7 @@
         nrepl-port 6666
         storage-dir (fs/absolutize ".garden/storage")
         timeout-seconds 60
-        garden-alias (edn/read-string (slurp "deps.edn"))
+        garden-alias (try (edn/read-string (slurp "deps.edn")) (catch Exception _ (print-error "Malformed deps.edn")))
         app-process (promise)
         start-command (start-command/start-command (assoc opts :garden-alias garden-alias))
         old-port (try (slurp ".nrepl-port") (catch java.io.FileNotFoundException _ nil))]
