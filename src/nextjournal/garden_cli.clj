@@ -180,7 +180,8 @@
     (fs/create-dirs storage-dir)
     (spit ".nrepl-port" nrepl-port)
     (let [p (p/process start-command
-                       {:extra-env {"GARDEN_NREPL_PORT" nrepl-port
+                       {:extra-env {"GARDEN_PROJECT_NAME" (:project opts)
+                                    "GARDEN_NREPL_PORT" nrepl-port
                                     "GARDEN_STORAGE" storage-dir
                                     "GARDEN_EMAIL_ADDRESS" "just-a-placeholder@example.com"
                                     "GARDEN_URL" url}
