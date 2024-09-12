@@ -45,6 +45,13 @@
     (println s))
   {:exit-code 1})
 
+(def ^:dynamic *debug* false)
+
+(defn print-debug [& s]
+  (when *debug*
+    (binding [*out* *err*]
+     (apply println s))))
+
 (defn read-config []
   (try
     (edn/read-string (slurp "garden.edn"))
@@ -72,9 +79,11 @@
 #_(update-config! assoc :v "1.2.1")
 
 (defn call-api [{:as body :keys [as]}]
-  (cond-> (apply shell {:out (if (= :stream as) :inherit :string)} "ssh" (ssh-args "api" (assoc body :version version)))
-    (not= :stream as)
-    (-> :out edn/read-string)))
+  (let [cmd (concat ["ssh"] (ssh-args "api" (assoc body :version version)))]
+    (print-debug (str/join " " cmd))
+    (cond-> (apply shell {:out (if (= :stream as) :inherit :string)} cmd)
+      (not= :stream as)
+      (-> :out edn/read-string))))
 
 #_(call-api {:command "create"})
 #_(call-api {:command "create" :project "hello"})
@@ -179,14 +188,16 @@
       .start)
     (fs/create-dirs storage-dir)
     (spit ".nrepl-port" nrepl-port)
-    (let [p (p/process start-command
-                       {:extra-env {"GARDEN_PROJECT_NAME" (:project opts)
-                                    "GARDEN_NREPL_PORT" nrepl-port
-                                    "GARDEN_STORAGE" storage-dir
-                                    "GARDEN_EMAIL_ADDRESS" "just-a-placeholder@example.com"
-                                    "GARDEN_URL" url}
+    (let [extra-env {"GARDEN_PROJECT_NAME" (:project opts)
+                     "GARDEN_NREPL_PORT" nrepl-port
+                     "GARDEN_STORAGE" storage-dir
+                     "GARDEN_EMAIL_ADDRESS" "just-a-placeholder@example.com"
+                     "GARDEN_URL" url}
+          p (p/process start-command
+                       {:extra-env extra-env
                         :out :inherit
                         :err :inherit})]
+      (print-debug (str/join " " (concat (for [[k v] extra-env] (str k "=" v)) start-command)))
       (deliver app-process p)
       (p/check p))))
 
@@ -939,6 +950,15 @@
                      (System/exit exit-code)
                      result))))))
 
+(defn wrap-with-debug [res]
+  (update-in res [:cmd-info :fn]
+             (fn [f]
+               (fn [{:as m :keys [opts]}]
+                 (if (:debug opts)
+                   (binding [*debug* true]
+                     (f m))
+                   (f m))))))
+
 (defn migrate-config-file! []
   (when (fs/exists? ".garden.edn")
     (spit "garden.edn"
@@ -966,7 +986,8 @@
 (defn -main [& _]
   (with-exception-reporting
     (migrate-config-file!)
-    (dispatch cmd-tree *command-line-args* {:middleware [wrap-with-error-reporting
+    (dispatch cmd-tree *command-line-args* {:middleware [wrap-with-debug
+                                                         wrap-with-error-reporting
                                                          wrap-with-help
                                                          wrap-with-quiet
                                                          wrap-with-exit-code
