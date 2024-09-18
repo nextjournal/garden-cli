@@ -165,7 +165,7 @@
         url (str "http://localhost:" http-port)
         nrepl-port 6666
         storage-dir (fs/absolutize ".garden/storage")
-        timeout-seconds 60
+        timeout-seconds (* 5 60)
         garden-alias (try (edn/read-string (slurp "deps.edn")) (catch Exception _ (print-error "Malformed deps.edn")))
         app-process (promise)
         start-command (start-command/start-command (assoc opts :garden-alias garden-alias))
