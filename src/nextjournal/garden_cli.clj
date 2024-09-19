@@ -179,7 +179,7 @@
     (doto (Thread. (fn [] (if (:success (wait-for #(try (<= 200
                                                             (:status (http/head url {:client (http/client {:follow-redirects :never})}))
                                                             399)
-                                                        (catch Throwable _ false))))
+                                                        (catch Throwable _ false)) timeout-seconds))
                             (println "Application ready on" url)
                             (do
                               (print-error (format "Application did not start after %ss." timeout-seconds))
