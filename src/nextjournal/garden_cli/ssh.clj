@@ -3,7 +3,7 @@
   (:import [java.net Socket ConnectException]))
 
 (def jumphost "deploy@jump.sauspiel.de")
-(def hosts {:production "deploy@172.16.227.70"
+(def hosts {:production "deploy@172.16.0.2"
             :staging "deploy@62.113.212.138"})
 (defonce tunnels (atom {}))
 
