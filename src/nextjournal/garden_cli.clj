@@ -459,6 +459,12 @@
       (do (println message) ret)
       (print-error message))))
 
+(defn list-group-members [{:keys [opts]}]
+  (let [{:as ret :keys [ok message members]} (call-api (assoc opts :command "list-group-members"))]
+    (if ok
+      (do (doseq [m members] (println m)) ret)
+      (print-error message))))
+
 (defn add-project-to-group [{:keys [opts]}]
   (let [{:as ret :keys [ok message]} (call-api (assoc opts :command "add-project-to-group"))]
     (if ok
@@ -469,6 +475,12 @@
   (let [{:as ret :keys [ok message]} (call-api (assoc opts :command "remove-project-from-group"))]
     (if ok
       (do (println message) ret)
+      (print-error message))))
+
+(defn list-group-projects [{:keys [opts]}]
+  (let [{:as ret :keys [ok message projects]} (call-api (assoc opts :command "list-group-projects"))]
+    (if ok
+      (do (doseq [p projects] (println p)) ret)
       (print-error message))))
 
 (defn delete-group [{:keys [opts]}]
@@ -711,7 +723,18 @@
       :group-handle
       {:ref "<handle>",
        :require true,
-       :desc "The group to remove a member from"})},
+       :desc "The group to remove a member from"})}
+    "list-members"
+    {:fn list-group-members,
+     :help "List members in a group"
+     :args->opts [:group-handle],
+     :spec
+     (assoc
+      default-spec
+      :group-handle
+      {:ref "<handle>",
+       :require true,
+       :desc "The group to list the members for"})},
     "add-project"
     {:fn add-project-to-group,
      :help "Add a project to a group"
@@ -740,6 +763,17 @@
        {:ref "<handle>",
         :require true,
         :desc "The group to remove a project from"}))}
+    "list-projects"
+    {:fn list-group-projects,
+     :help "List projects in a group"
+     :args->opts [:group-handle],
+     :spec
+     (assoc
+      default-spec
+      :group-handle
+      {:ref "<handle>",
+       :require true,
+       :desc "The group to list the projects for"})}
     "delete"
     {:fn delete-group,
      :help "Delete a group"
