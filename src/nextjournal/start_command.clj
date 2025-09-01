@@ -26,6 +26,7 @@
              ["clojure"
               "-Srepro"
               "-Sdeps" (pr-str sdeps)
+              "-J-Xmx3G"
               "-J-Dclojure.main.report=stdout"
               (when-some [extra-aliases (get garden-alias :nextjournal.garden/aliases)]
                 (when-not (every? keyword? extra-aliases) (throw (ex-info "`:nextjournal.garden/aliases` must be a vector of keywords" opts)))
