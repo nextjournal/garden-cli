@@ -1,7 +1,7 @@
 (ns nextjournal.start-command
   (:require [clojure.string :as str]))
 
-(def garden-nrepl-sha "71df818c82157e26032c81bd1d397c77105ea235")
+(def garden-nrepl-sha "0cbcebd2577b5735bdea7bc094cf509753daafd1")
 
 (defn create-sdeps [sdeps skip-inject-nrepl]
   (merge sdeps
