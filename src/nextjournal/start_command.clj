@@ -9,19 +9,6 @@
            {:deps {'io.github.nextjournal/garden-nrepl {:git/sha garden-nrepl-sha}}
             :aliases {:nextjournal/garden-nrepl {:exec-fn 'nextjournal.garden-nrepl/start!}}})))
 
-(defn fetch-deps-command [{:as opts
-                           :keys [skip-inject-nrepl garden-alias sdeps]}]
-  (filterv some?
-           ["clojure"
-            "-P"
-            "-Srepro"
-            "-Sdeps" (pr-str (create-sdeps sdeps skip-inject-nrepl))
-            "-J-Dclojure.main.report=stdout"
-            (when-some [extra-aliases (get garden-alias :nextjournal.garden/aliases)]
-              (when-not (every? keyword? extra-aliases) (throw (ex-info "`:nextjournal.garden/aliases` must be a vector of keywords" opts)))
-              (str "-A" (str/join extra-aliases)))
-            "-A:nextjournal/garden"]))
-
 (defn start-command [{:as opts
                       :keys [skip-inject-nrepl garden-alias sdeps]
                       :or {sdeps {}}}]
@@ -39,3 +26,9 @@
               "-X:nextjournal/garden:nextjournal/garden-nrepl"
               "-X:nextjournal/garden")
             ":host" "\"0.0.0.0\"" ":port" "7777"]))
+
+(defn fetch-deps-command
+  "Prepares the exact classpath `start-command` uses, so a start with a
+  read-only deps cache finds it in .cpcache and resolves nothing."
+  [opts]
+  (into ["clojure" "-P"] (rest (start-command opts))))
