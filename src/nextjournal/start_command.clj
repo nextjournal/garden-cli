@@ -31,6 +31,7 @@
             "-Sdeps" (pr-str (create-sdeps sdeps skip-inject-nrepl))
             "-J-Xmx3G"
             "-J-Dclojure.main.report=stdout"
+            "-J-XX:-UseBASE64Intrinsics"
             (when-some [extra-aliases (get garden-alias :nextjournal.garden/aliases)]
               (when-not (every? keyword? extra-aliases) (throw (ex-info "`:nextjournal.garden/aliases` must be a vector of keywords" opts)))
               (str "-A" (str/join extra-aliases)))
